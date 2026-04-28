@@ -22,7 +22,7 @@ impl<'a> SpeakerVisualizer<'a> {
 
         // 1. 背景（明るいグレー）
         painter.rect_filled(rect, 8.0, Color32::from_gray(240));
-        
+
         let painter = painter.with_clip_rect(rect);
         if room_mix > 0.01 {
             // 1. 中心のソフトグロー（空間の広がり - 淡いブルー/ホワイト）
@@ -32,7 +32,11 @@ impl<'a> SpeakerVisualizer<'a> {
                 let radius = height * (0.3 + t * 1.0);
                 let alpha = (room_mix * 25.0 * (1.0 - t).powi(3)) as u8;
 
-                painter.circle_filled(center, radius, Color32::from_rgb(180, 210, 255).linear_multiply(alpha as f32 / 255.0));
+                painter.circle_filled(
+                    center,
+                    radius,
+                    Color32::from_rgb(180, 210, 255).linear_multiply(alpha as f32 / 255.0),
+                );
             }
 
             // 2. 多段階ヴィニエット（シルバー/グレー）
@@ -45,7 +49,10 @@ impl<'a> SpeakerVisualizer<'a> {
                 painter.rect_stroke(
                     rect,
                     8.0,
-                    Stroke::new(thickness, Color32::from_gray(200).linear_multiply(alpha as f32 / 255.0)),
+                    Stroke::new(
+                        thickness,
+                        Color32::from_gray(200).linear_multiply(alpha as f32 / 255.0),
+                    ),
                     egui::StrokeKind::Inside,
                 );
             }

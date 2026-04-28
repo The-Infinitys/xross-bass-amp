@@ -56,9 +56,13 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Option<Box<dyn Editor>>
                                 draw_section_weighted(ui, "GAIN / DIST", 5.0, |ui| {
                                     let p = &params.gain_section;
                                     ui.horizontal(|ui| {
-                                        for k in
-                                            [&p.input_gain, &p.drive, &p.grind, &p.blend, &p.master_gain]
-                                        {
+                                        for k in [
+                                            &p.input_gain,
+                                            &p.drive,
+                                            &p.grind,
+                                            &p.blend,
+                                            &p.master_gain,
+                                        ] {
                                             ui.add(Knob::new(
                                                 k,
                                                 setter,
@@ -155,7 +159,9 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Option<Box<dyn Editor>>
 
                                             ui.vertical(|ui| {
                                                 ui.label(
-                                                    egui::RichText::new("Cabinet / Room").color(Color32::from_gray(80)).strong(),
+                                                    egui::RichText::new("Cabinet / Room")
+                                                        .color(Color32::from_gray(80))
+                                                        .strong(),
                                                 );
                                                 ui.add(LinearSlider::new(
                                                     &params.cab_section.speaker_size,
@@ -171,7 +177,9 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Option<Box<dyn Editor>>
 
                                             ui.vertical(|ui| {
                                                 ui.label(
-                                                    egui::RichText::new("Speaker Count").color(Color32::from_gray(80)).strong(),
+                                                    egui::RichText::new("Speaker Count")
+                                                        .color(Color32::from_gray(80))
+                                                        .strong(),
                                                 );
                                                 ui.add_space(5.0);
                                                 ui.horizontal(|ui| {

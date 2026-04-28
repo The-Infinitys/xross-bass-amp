@@ -132,7 +132,11 @@ impl<'a> egui::Widget for Knob<'a> {
             // ノブ本体 (メタリックシルバー/ライトグレー)
             painter.circle_filled(center, radius, egui::Color32::from_gray(220));
             // ベベル効果的な円
-            painter.circle_stroke(center, radius * 0.9, egui::Stroke::new(1.0, egui::Color32::WHITE));
+            painter.circle_stroke(
+                center,
+                radius * 0.9,
+                egui::Stroke::new(1.0, egui::Color32::WHITE),
+            );
 
             let tip = center + egui::vec2(current_angle.cos(), current_angle.sin()) * radius;
             let base =
@@ -177,11 +181,7 @@ impl<'a> egui::Widget for Knob<'a> {
             } else {
                 let val_res =
                     ui.interact(value_rect, id.with("val_interact"), egui::Sense::click());
-                painter.rect_filled(
-                    value_rect.shrink(2.0),
-                    4.0,
-                    egui::Color32::from_gray(230),
-                );
+                painter.rect_filled(value_rect.shrink(2.0), 4.0, egui::Color32::from_gray(230));
                 painter.text(
                     value_rect.center(),
                     egui::Align2::CENTER_CENTER,

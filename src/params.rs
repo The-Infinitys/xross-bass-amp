@@ -51,12 +51,8 @@ impl Default for GainParams {
             .with_value_to_string(Arc::new(|x| format!("{:.1}", x))),
             drive: FloatParam::new("Drive", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(Arc::new(|x| format!("{:.2}", x))),
-            grind: FloatParam::new(
-                "Grind",
-                0.5,
-                FloatRange::Linear { min: 0.0, max: 1.0 },
-            )
-            .with_value_to_string(Arc::new(|x| format!("{:.2}", x))),
+            grind: FloatParam::new("Grind", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(Arc::new(|x| format!("{:.2}", x))),
             blend: FloatParam::new(
                 "Clean Blend",
                 0.5,
@@ -212,8 +208,12 @@ pub struct EffectsParams {
 impl Default for EffectsParams {
     fn default() -> Self {
         Self {
-            compressor: FloatParam::new("Compressor", 0.3, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(Arc::new(|x| format!("{:.1}", x))),
+            compressor: FloatParam::new(
+                "Compressor",
+                0.3,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            )
+            .with_value_to_string(Arc::new(|x| format!("{:.1}", x))),
             tight: FloatParam::new(
                 "Tight",
                 120.0,
