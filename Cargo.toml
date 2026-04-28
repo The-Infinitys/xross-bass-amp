@@ -1,0 +1,23 @@
+[package]
+name = "xross-guitar-amp"
+version = "1.0.0"
+edition = "2024"
+default-run = "xross-guitar-amp-standalone"
+license = "MIT"
+[lib]
+crate-type = ["cdylib", "lib"]
+[[bin]]
+name = "xross-guitar-amp-standalone"
+path = "src/main.rs"
+
+
+[[bin]]
+name = "xross-guitar-amp-bundle"
+path = "src/bundle.rs"
+
+[dependencies]
+
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["standalone"] }
+nih_plug_xtask = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+egui_extras = { version = "0.31.1", features = ["svg", "image"] }

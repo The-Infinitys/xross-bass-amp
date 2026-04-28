@@ -1,0 +1,2 @@
+[alias]
+bundle = "run --bin xross-guitar-amp-bundle -- bundle xross-guitar-amp"
