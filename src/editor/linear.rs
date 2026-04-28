@@ -83,9 +83,9 @@ impl<'a> egui::Widget for LinearSlider<'a> {
             let visual_val = self.param.unmodulated_normalized_value();
             let bar_color = self.color.linear_multiply(0.6);
 
-            // 背景とバー
+            // 背景とバー (明るい背景に変更)
             let painter = ui.painter();
-            painter.rect_filled(rect, 2.0, egui::Color32::from_rgb(5, 5, 5));
+            painter.rect_filled(rect, 2.0, egui::Color32::from_gray(245));
 
             let fill_rect = {
                 let x_pos = rect.left() + (visual_val * rect.width());
@@ -96,20 +96,20 @@ impl<'a> egui::Widget for LinearSlider<'a> {
             painter.rect_stroke(
                 rect,
                 2.0,
-                egui::Stroke::new(1.0, egui::Color32::from_gray(60)),
+                egui::Stroke::new(1.0, egui::Color32::from_gray(200)),
                 StrokeKind::Middle,
             );
 
-            // ハンドル
+            // ハンドル (濃いグレー)
             let handle_x = (rect.left() + visual_val * rect.width())
                 .clamp(rect.left() + 1.0, rect.right() - 1.0);
             let handle_rect = egui::Rect::from_center_size(
                 egui::pos2(handle_x, rect.center().y),
                 egui::vec2(2.0, rect.height()),
             );
-            painter.rect_filled(handle_rect, 0.0, egui::Color32::WHITE);
+            painter.rect_filled(handle_rect, 0.0, egui::Color32::from_gray(100));
 
-            // テキスト描画
+            // テキスト描画 (濃いグレーに変更)
             if is_editing_text {
                 let mut value_text = ui.memory(|mem| {
                     mem.data
@@ -121,7 +121,7 @@ impl<'a> egui::Widget for LinearSlider<'a> {
                     text_rect,
                     egui::TextEdit::singleline(&mut value_text)
                         .font(egui::FontId::proportional(11.0))
-                        .text_color(egui::Color32::WHITE)
+                        .text_color(egui::Color32::from_gray(40))
                         .horizontal_align(egui::Align::Center)
                         .frame(false),
                 );
@@ -152,18 +152,11 @@ impl<'a> egui::Widget for LinearSlider<'a> {
                 let text_pos = rect.center();
 
                 painter.text(
-                    text_pos + egui::vec2(1.0, 1.0),
-                    egui::Align2::CENTER_CENTER,
-                    &text,
-                    font_id.clone(),
-                    egui::Color32::from_black_alpha(200),
-                );
-                painter.text(
                     text_pos,
                     egui::Align2::CENTER_CENTER,
                     &text,
                     font_id.clone(),
-                    egui::Color32::from_gray(180),
+                    egui::Color32::from_gray(60),
                 );
                 painter.with_clip_rect(fill_rect).text(
                     text_pos,

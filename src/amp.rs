@@ -9,17 +9,17 @@ pub use cab::CabProcessor;
 pub use eq::EqProcessor;
 pub use gain::GainProcessor;
 
-use crate::params::XrossGuitarAmpParams;
-pub struct XrossGuitarAmp {
-    params: Arc<XrossGuitarAmpParams>,
+use crate::params::XrossBassAmpParams;
+pub struct XrossBassAmp {
+    params: Arc<XrossBassAmpParams>,
     gain_proc: GainProcessor,
     eq_proc: EqProcessor,
     cab_proc: CabProcessor,
 }
 
-impl Default for XrossGuitarAmp {
+impl Default for XrossBassAmp {
     fn default() -> Self {
-        let params = Arc::new(XrossGuitarAmpParams::default());
+        let params = Arc::new(XrossBassAmpParams::default());
         Self {
             gain_proc: GainProcessor::new(params.clone()),
             eq_proc: EqProcessor::new(params.clone()),
@@ -29,7 +29,7 @@ impl Default for XrossGuitarAmp {
     }
 }
 
-impl XrossGuitarAmp {
+impl XrossBassAmp {
     pub fn initialize(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
@@ -84,7 +84,7 @@ impl XrossGuitarAmp {
 
         ProcessStatus::Normal
     }
-    pub fn params(&self) -> Arc<XrossGuitarAmpParams> {
+    pub fn params(&self) -> Arc<XrossBassAmpParams> {
         self.params.clone()
     }
 }

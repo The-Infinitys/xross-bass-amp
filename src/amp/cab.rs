@@ -1,5 +1,5 @@
 use crate::modules::filter::{Biquad, FilterType};
-use crate::params::XrossGuitarAmpParams;
+use crate::params::XrossBassAmpParams;
 use std::sync::Arc;
 
 const PHASE_DELAY_SIZE: usize = 2048;
@@ -7,7 +7,7 @@ const PHASE_DELAY_MASK: usize = PHASE_DELAY_SIZE - 1;
 const MAX_BUFFER_SIZE: usize = 192000;
 
 pub struct CabProcessor {
-    pub params: Arc<XrossGuitarAmpParams>,
+    pub params: Arc<XrossBassAmpParams>,
 
     // --- フィルタ群 ---
     mic_a_filters: [Biquad; 5],
@@ -17,7 +17,7 @@ pub struct CabProcessor {
     impedance_resonance: Biquad,
     presence_shelf: Biquad,
     cabinet_thump: Biquad, // 低域の押し出し
-    box_resonance: Biquad, // 箱鳴り (200-400Hz付近)
+    box_resonance: Biquad, // 箱鳴り
     tight_filter: Biquad,
 
     // 位相を散らすためのAll-pass
@@ -43,7 +43,7 @@ pub struct CabProcessor {
 }
 
 impl CabProcessor {
-    pub fn new(params: Arc<XrossGuitarAmpParams>) -> Self {
+    pub fn new(params: Arc<XrossBassAmpParams>) -> Self {
         let sr = 44100.0;
         Self {
             params,
@@ -119,13 +119,14 @@ impl CabProcessor {
         let res_val = eq.resonance.value();
         let pres_val = eq.presence.value();
 
-        // 変更検知（閾値による判定）
+        // 変更検知
         if (s_size - self.last_speaker_size).abs() > 0.001
             || s_count != self.last_speaker_count
             || (d_a - self.last_mic_params[0]).abs() > 0.001
             || (res_val - self.last_eq_extras[0]).abs() > 0.001
         {
-            let speaker_res_freq = 82.0 * (12.0 / s_size);
+            // ベース用に低域の共鳴周波数を下げる (10インチで約55Hz, 15インチで約40Hz)
+            let speaker_res_freq = 55.0 * (10.0 / s_size);
             let count_scale = (s_count as f32).sqrt();
 
             // 1. パワーアンプとの相互作用
@@ -135,60 +136,59 @@ impl CabProcessor {
                 1.2,
             );
             self.presence_shelf
-                .set_params(FilterType::HighShelf(pres_val * 1.8), 3800.0, 0.7);
+                .set_params(FilterType::HighShelf(pres_val * 1.5), 2500.0, 0.7);
 
             // 2. キャビネットの物理的共鳴
-            // 箱のサイズに応じた中低域の溜まり
-            let box_res_freq = 250.0 * (12.0 / s_size);
+            let box_res_freq = 150.0 * (10.0 / s_size);
             self.box_resonance.set_params(
-                FilterType::Peaking(2.0 * count_scale),
+                FilterType::Peaking(2.5 * count_scale),
                 box_res_freq,
-                2.0,
+                1.5,
             );
 
-            let internal_res = 1150.0 * (12.0 / s_size);
+            let internal_res = 850.0 * (10.0 / s_size);
             self.internal_standing_wave
-                .set_params(FilterType::Peaking(-5.0), internal_res, 3.0);
+                .set_params(FilterType::Peaking(-6.0), internal_res, 3.0);
 
-            // 3. 位相の拡散 (All-pass) - アナログ的な曖昧さを出す
-            self.phase_smearer[0].set_params(FilterType::AllPass, 1200.0, 0.5);
-            self.phase_smearer[1].set_params(FilterType::AllPass, 3500.0, 0.5);
+            // 3. 位相の拡散 (All-pass)
+            self.phase_smearer[0].set_params(FilterType::AllPass, 800.0, 0.5);
+            self.phase_smearer[1].set_params(FilterType::AllPass, 2200.0, 0.5);
 
             // 4. スピーカー個体差 (Cone Breakup)
-            self.cone_character[0].set_params(FilterType::Peaking(-4.0), 850.0, 1.5);
-            self.cone_character[1].set_params(FilterType::Peaking(3.0), 2200.0, 1.0);
-            self.cone_character[2].set_params(FilterType::Peaking(4.5), 3800.0, 2.0);
-            self.cone_character[3].set_params(FilterType::Peaking(-6.0), 6500.0, 2.5);
+            self.cone_character[0].set_params(FilterType::Peaking(-3.0), 600.0, 1.5);
+            self.cone_character[1].set_params(FilterType::Peaking(2.0), 1500.0, 1.0);
+            self.cone_character[2].set_params(FilterType::Peaking(3.5), 2800.0, 2.0);
+            self.cone_character[3].set_params(FilterType::Peaking(-5.0), 5000.0, 2.5);
 
-            // 5. Mic A (Dynamic) - 近接効果と軸外減衰
-            let prox_a = (1.0 - d_a).powi(3) * 12.0;
+            // 5. Mic A (Dynamic)
+            let prox_a = (1.0 - d_a).powi(3) * 15.0;
             self.mic_a_filters[0].set_params(
                 FilterType::Peaking(prox_a),
                 speaker_res_freq * 1.1,
                 0.8,
             );
-            let edge_a = (1.0 - a_a) * 8.0;
-            self.mic_a_filters[2].set_params(FilterType::Peaking(edge_a), 3200.0, 1.0);
-            let hc_a = 15000.0 * (1.0 - a_a * 0.5) * (1.0 - d_a * 0.15);
-            self.mic_a_filters[4].set_params(FilterType::LowPass, hc_a.max(3000.0), 0.707);
+            let edge_a = (1.0 - a_a) * 6.0;
+            self.mic_a_filters[2].set_params(FilterType::Peaking(edge_a), 2000.0, 1.0);
+            let hc_a = 12000.0 * (1.0 - a_a * 0.5) * (1.0 - d_a * 0.15);
+            self.mic_a_filters[4].set_params(FilterType::LowPass, hc_a.max(2500.0), 0.707);
 
-            // 6. Mic B (Ribbon) - よりダークでウォームな特性
-            let prox_b = (1.0 - d_b).powi(2) * 18.0;
+            // 6. Mic B (Condenser/Large Diaphragm for Bass)
+            let prox_b = (1.0 - d_b).powi(2) * 12.0;
             self.mic_b_filters[0].set_params(
                 FilterType::Peaking(prox_b),
                 speaker_res_freq * 0.9,
                 0.6,
             );
-            let dark_b = (1.0 - d_b * 0.5) * -4.0;
-            self.mic_b_filters[3].set_params(FilterType::HighShelf(dark_b), 4000.0, 0.7);
-            let hc_b = 11000.0 * (1.0 - a_b * 0.7) * (1.0 - d_b * 0.3);
-            self.mic_b_filters[4].set_params(FilterType::LowPass, hc_b.max(2000.0), 0.707);
+            let deep_b = (1.0 - d_b * 0.3) * 3.0;
+            self.mic_b_filters[3].set_params(FilterType::LowShelf(deep_b), 100.0, 0.7);
+            let hc_b = 10000.0 * (1.0 - a_b * 0.7) * (1.0 - d_b * 0.3);
+            self.mic_b_filters[4].set_params(FilterType::LowPass, hc_b.max(1800.0), 0.707);
 
             // 7. Overall Tightness
             self.cabinet_thump
-                .set_params(FilterType::Peaking(3.0 * count_scale), 110.0, 2.0);
+                .set_params(FilterType::Peaking(4.0 * count_scale), 60.0, 2.0);
             self.tight_filter
-                .set_params(FilterType::HighPass, 75.0, 0.6);
+                .set_params(FilterType::HighPass, 35.0, 0.6);
 
             self.last_speaker_size = s_size;
             self.last_speaker_count = s_count;

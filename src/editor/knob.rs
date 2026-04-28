@@ -18,23 +18,14 @@ impl<'a> Knob<'a> {
         }
     }
 
-    /// 値に応じて色を動的に変化させる（高い値ほど鮮やかに）
+    /// 値に応じて色を動的に変化させる（白背景向けに調整）
     fn get_dynamic_color(&self, visual_val: f32) -> egui::Color32 {
-        let r = (self.base_color.r() as f32 * (0.5 + visual_val * 0.5)) as u8;
-        let g = (self.base_color.g() as f32 * (0.5 + visual_val * 0.5)) as u8;
-        let b = (self.base_color.b() as f32 * (0.5 + visual_val * 0.5)) as u8;
+        // 白背景なので、少し濃い目の色をベースにする
+        let r = (self.base_color.r() as f32 * (0.7 + visual_val * 0.3)) as u8;
+        let g = (self.base_color.g() as f32 * (0.7 + visual_val * 0.3)) as u8;
+        let b = (self.base_color.b() as f32 * (0.7 + visual_val * 0.3)) as u8;
 
-        if visual_val > 0.8 {
-            // 最大値付近で少し白っぽく「発光」させる
-            let boost = ((visual_val - 0.8) * 5.0 * 50.0) as u8;
-            egui::Color32::from_rgb(
-                r.saturating_add(boost),
-                g.saturating_add(boost),
-                b.saturating_add(boost),
-            )
-        } else {
-            egui::Color32::from_rgb(r, g, b)
-        }
+        egui::Color32::from_rgb(r, g, b)
     }
 }
 
@@ -97,13 +88,13 @@ impl<'a> egui::Widget for Knob<'a> {
                 egui::Vec2::splat(knob_area_width),
             );
 
-            // A. タイトル表示
+            // A. タイトル表示 (濃いグレーに変更)
             painter.text(
                 title_rect.center(),
                 egui::Align2::CENTER_CENTER,
                 self.param.name(),
                 egui::FontId::proportional(13.0),
-                egui::Color32::from_gray(200),
+                egui::Color32::from_gray(60),
             );
 
             // B. ノブ本体
@@ -113,12 +104,12 @@ impl<'a> egui::Widget for Knob<'a> {
             let end_angle = PI * 2.25;
             let current_angle = start_angle + (visual_val * (end_angle - start_angle));
 
-            // 背景（溝）
-            painter.circle_filled(center, radius + 2.0, egui::Color32::BLACK);
+            // 背景（シルバーの縁取り）
+            painter.circle_filled(center, radius + 2.0, egui::Color32::from_gray(240));
             painter.circle_stroke(
                 center,
                 radius + 4.0,
-                egui::Stroke::new(2.0, egui::Color32::from_gray(40)),
+                egui::Stroke::new(2.0, egui::Color32::from_gray(200)),
             );
 
             // 円弧インジケーター
@@ -138,8 +129,11 @@ impl<'a> egui::Widget for Knob<'a> {
                 ));
             }
 
-            // ノブ本体と指針
-            painter.circle_filled(center, radius, egui::Color32::from_gray(25));
+            // ノブ本体 (メタリックシルバー/ライトグレー)
+            painter.circle_filled(center, radius, egui::Color32::from_gray(220));
+            // ベベル効果的な円
+            painter.circle_stroke(center, radius * 0.9, egui::Stroke::new(1.0, egui::Color32::WHITE));
+
             let tip = center + egui::vec2(current_angle.cos(), current_angle.sin()) * radius;
             let base =
                 center + egui::vec2(current_angle.cos(), current_angle.sin()) * (radius * 0.4);
@@ -186,7 +180,7 @@ impl<'a> egui::Widget for Knob<'a> {
                 painter.rect_filled(
                     value_rect.shrink(2.0),
                     4.0,
-                    egui::Color32::from_black_alpha(100),
+                    egui::Color32::from_gray(230),
                 );
                 painter.text(
                     value_rect.center(),

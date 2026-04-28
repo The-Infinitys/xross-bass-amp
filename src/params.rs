@@ -3,7 +3,7 @@ use nih_plug::prelude::*;
 use std::sync::Arc;
 
 #[derive(Params, Default)]
-pub struct XrossGuitarAmpParams {
+pub struct XrossBassAmpParams {
     /// 1. ゲインセクション
     #[nested(group = "Gain Section", id_prefix = "gain_")]
     pub gain_section: GainParams,
@@ -28,8 +28,10 @@ pub struct GainParams {
     pub input_gain: FloatParam,
     #[id = "drive"]
     pub drive: FloatParam,
-    #[id = "dist"]
-    pub distortion: FloatParam,
+    #[id = "grind"]
+    pub grind: FloatParam,
+    #[id = "blend"]
+    pub blend: FloatParam,
     #[id = "master"]
     pub master_gain: FloatParam,
 }
@@ -49,8 +51,14 @@ impl Default for GainParams {
             .with_value_to_string(Arc::new(|x| format!("{:.1}", x))),
             drive: FloatParam::new("Drive", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(Arc::new(|x| format!("{:.2}", x))),
-            distortion: FloatParam::new(
-                "Distortion",
+            grind: FloatParam::new(
+                "Grind",
+                0.5,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            )
+            .with_value_to_string(Arc::new(|x| format!("{:.2}", x))),
+            blend: FloatParam::new(
+                "Clean Blend",
                 0.5,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
@@ -110,7 +118,7 @@ impl Default for EqParams {
 #[derive(Params)]
 pub struct CabParams {
     #[id = "spk_size"]
-    pub speaker_size: FloatParam, // 8" to 15"
+    pub speaker_size: FloatParam, // 10" to 15"
 
     #[id = "spk_count"]
     pub speaker_count: IntParam, // 1, 2, 4 speakers
@@ -139,29 +147,29 @@ impl Default for CabParams {
         Self {
             speaker_size: FloatParam::new(
                 "Speaker Size",
-                12.0,
+                10.0,
                 FloatRange::Linear {
-                    min: 8.0,
-                    max: 15.0,
+                    min: 10.0,
+                    max: 18.0,
                 },
             )
             .with_unit(" inch")
             .with_value_to_string(Arc::new(|x| format!("{:.1}", x))),
 
-            // スピーカーの数は 1, 2, 4 の切り替えを想定
-            speaker_count: IntParam::new("Speaker Count", 4, IntRange::Linear { min: 1, max: 8 }),
+            // スピーカーの数は 1, 2, 4, 8 の切り替えを想定
+            speaker_count: IntParam::new("Speaker Count", 8, IntRange::Linear { min: 1, max: 8 }),
 
             // Microphone A
             mic_a_distance: FloatParam::new(
                 "Mic A Distance",
-                0.5,
+                0.2,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
             .with_value_to_string(Arc::new(|x| format!("{:.2}", x))),
 
             mic_a_axis: FloatParam::new(
                 "Mic A Axis",
-                0.5,
+                0.3,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
             .with_value_to_string(Arc::new(|x| format!("{:.2}", x))),
@@ -169,23 +177,23 @@ impl Default for CabParams {
             // Microphone B
             mic_b_distance: FloatParam::new(
                 "Mic B Distance",
-                0.5,
+                0.6,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
             .with_value_to_string(Arc::new(|x| format!("{:.2}", x))),
 
             mic_b_axis: FloatParam::new(
                 "Mic B Axis",
-                0.5,
+                0.8,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
             .with_value_to_string(Arc::new(|x| format!("{:.2}", x))),
 
             // Room Settings
-            room_size: FloatParam::new("Room Size", 0.3, FloatRange::Linear { min: 0.0, max: 1.0 })
+            room_size: FloatParam::new("Room Size", 0.4, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(Arc::new(|x| format!("{:.2}", x))),
 
-            room_mix: FloatParam::new("Room Mix", 0.1, FloatRange::Linear { min: 0.0, max: 1.0 })
+            room_mix: FloatParam::new("Room Mix", 0.05, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(Arc::new(|x| format!("{:.2}", x))),
         }
     }
@@ -193,22 +201,22 @@ impl Default for CabParams {
 // --- 4. Effects Section ---
 #[derive(Params)]
 pub struct EffectsParams {
-    #[id = "sag"]
-    pub sag: FloatParam,
+    #[id = "comp"]
+    pub compressor: FloatParam,
     #[id = "tight"]
     pub tight: FloatParam,
-    #[id = "reverb_mix"]
-    pub reverb_mix: FloatParam,
+    #[id = "gate"]
+    pub noise_gate: FloatParam,
 }
 
 impl Default for EffectsParams {
     fn default() -> Self {
         Self {
-            sag: FloatParam::new("Sag", 0.2, FloatRange::Linear { min: 0.0, max: 1.0 })
+            compressor: FloatParam::new("Compressor", 0.3, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(Arc::new(|x| format!("{:.1}", x))),
             tight: FloatParam::new(
                 "Tight",
-                80.0,
+                120.0,
                 FloatRange::Skewed {
                     min: 20.0,
                     max: 500.0,
@@ -217,9 +225,9 @@ impl Default for EffectsParams {
             )
             .with_unit(" Hz")
             .with_value_to_string(Arc::new(|x| format!("{:.0}", x))),
-            reverb_mix: FloatParam::new(
-                "Reverb Mix",
-                0.1,
+            noise_gate: FloatParam::new(
+                "Noise Gate",
+                0.2,
                 FloatRange::Linear { min: 0.0, max: 1.0 },
             )
             .with_value_to_string(Arc::new(|x| format!("{:.2}", x))),

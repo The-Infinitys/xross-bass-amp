@@ -1,15 +1,15 @@
 use nih_plug::plugin::Plugin;
 use nih_plug::prelude::*;
 
-use crate::XrossGuitarAmp;
+use crate::XrossBassAmp;
 use crate::editor::create_editor;
 
-impl Plugin for XrossGuitarAmp {
-    const NAME: &'static str = "Xross Guitar Amp";
+impl Plugin for XrossBassAmp {
+    const NAME: &'static str = "Xross Bass Amp";
 
     const VENDOR: &'static str = "The Infinitys";
 
-    const URL: &'static str = "https://github.com/The-Infinitys/xross-guitar-amp";
+    const URL: &'static str = "https://github.com/The-Infinitys/xross-bass-amp";
 
     const EMAIL: &'static str = "the.infinity.s.infinity@gmail.com";
 
@@ -70,32 +70,34 @@ impl Plugin for XrossGuitarAmp {
     }
 }
 
-impl Vst3Plugin for XrossGuitarAmp {
-    const VST3_CLASS_ID: [u8; 16] = *b"Xross Guitar Amp";
+impl Vst3Plugin for XrossBassAmp {
+    const VST3_CLASS_ID: [u8; 16] = *b"Xross Bass Amp!!";
 
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[
         Vst3SubCategory::Distortion,
+        Vst3SubCategory::Dynamics,
         Vst3SubCategory::Fx,
-        Vst3SubCategory::Custom("guitar"),
+        Vst3SubCategory::Custom("bass"),
     ];
 }
-impl ClapPlugin for XrossGuitarAmp {
-    const CLAP_ID: &'static str = "Xross Guitar Amp";
+impl ClapPlugin for XrossBassAmp {
+    const CLAP_ID: &'static str = "Xross Bass Amp";
 
-    const CLAP_DESCRIPTION: Option<&'static str> = Some("Modern Guitar Amplifier");
+    const CLAP_DESCRIPTION: Option<&'static str> = Some("Modern Bass Amplifier");
 
     const CLAP_MANUAL_URL: Option<&'static str> =
-        Some("https://github.com/The-Infinitys/xross-guitar-amp");
+        Some("https://github.com/The-Infinitys/xross-bass-amp");
 
     const CLAP_SUPPORT_URL: Option<&'static str> =
-        Some("https://github.com/The-Infinitys/xross-guitar-amp/issues");
+        Some("https://github.com/The-Infinitys/xross-bass-amp/issues");
 
     const CLAP_FEATURES: &'static [ClapFeature] = &[
-        ClapFeature::AudioEffect,      // ← これを必ず追加（メイン）
-        ClapFeature::Distortion,       // 歪みアンプとして重要
-        ClapFeature::Custom("guitar"), // または "amp" / "guitar-amp"（ホストでわかりやすく）
+        ClapFeature::AudioEffect,
+        ClapFeature::Distortion,
+        ClapFeature::Custom("bass"),
+        ClapFeature::Custom("amp"),
     ];
 }
 
-nih_export_clap!(XrossGuitarAmp);
-nih_export_vst3!(XrossGuitarAmp);
+nih_export_clap!(XrossBassAmp);
+nih_export_vst3!(XrossBassAmp);

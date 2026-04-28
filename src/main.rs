@@ -1,6 +1,6 @@
 use nih_plug::wrapper::standalone::nih_export_standalone;
-use xross_guitar_amp::XrossGuitarAmp;
+use xross_bass_amp::XrossBassAmp;
 
 fn main() {
-    nih_export_standalone::<XrossGuitarAmp>();
+    nih_export_standalone::<XrossBassAmp>();
 }

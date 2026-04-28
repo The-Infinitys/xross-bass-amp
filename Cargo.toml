@@ -1,18 +1,18 @@
 [package]
-name = "xross-guitar-amp"
+name = "xross-bass-amp"
 version = "1.0.0"
 edition = "2024"
-default-run = "xross-guitar-amp-standalone"
+default-run = "xross-bass-amp-standalone"
 license = "MIT"
 [lib]
 crate-type = ["cdylib", "lib"]
 [[bin]]
-name = "xross-guitar-amp-standalone"
+name = "xross-bass-amp-standalone"
 path = "src/main.rs"
 
 
 [[bin]]
-name = "xross-guitar-amp-bundle"
+name = "xross-bass-amp-bundle"
 path = "src/bundle.rs"
 
 [dependencies]
