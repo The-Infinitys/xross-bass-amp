@@ -49,7 +49,7 @@ pub struct XrossBassAmpParams {
     #[param(
         name = "Noise Gate",
         range = "linear(0.0, 1.0)",
-        default = 0.0,
+        default = 0.5,
         smooth = "exp(50)"
     )]
     pub noise_gate: FloatParam,
