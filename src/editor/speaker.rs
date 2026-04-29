@@ -72,17 +72,17 @@ impl<'a> SpeakerVisualizer<'a> {
                         positions.push(center + Vec2::new(x * step_x, y * step_y));
                     }
                 }
-                height * 0.16
+                height * 0.12
             }
             16 => {
                 let step_x = height * 0.22;
                 let step_y = height * 0.22;
-                for x in &[-1.5, -0.5, 0.5, 1.5] {
+                for x in &[-2.0, -1.0, 1.0, 2.0] {
                     for y in &[-1.5, -0.5, 0.5, 1.5] {
                         positions.push(center + Vec2::new(x * step_x, y * step_y));
                     }
                 }
-                height * 0.12
+                height * 0.1
             }
             _ => {
                 // 4
@@ -111,7 +111,7 @@ impl<'a> SpeakerVisualizer<'a> {
         self.draw_mic(
             &painter,
             center,
-            width * 0.4,
+            width * 0.15,
             -self.params.mic_a_axis.value(),
             self.params.mic_a_distance.value(),
             Color32::from_rgb(0, 140, 255), // 明るい青
@@ -121,7 +121,7 @@ impl<'a> SpeakerVisualizer<'a> {
         self.draw_mic(
             &painter,
             center,
-            width * 0.4,
+            width * 0.15,
             self.params.mic_b_axis.value(),
             self.params.mic_b_distance.value(),
             Color32::from_rgb(255, 110, 0), // 明るいオレンジ

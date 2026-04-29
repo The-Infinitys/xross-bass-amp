@@ -46,6 +46,14 @@ pub struct XrossBassAmpParams {
     )]
     pub compression: FloatParam,
 
+    #[param(
+        name = "Noise Gate",
+        range = "linear(0.0, 1.0)",
+        default = 0.0,
+        smooth = "exp(50)"
+    )]
+    pub noise_gate: FloatParam,
+
     // --- 3. EQ Section ---
     #[param(
         name = "Sub / Ultra Low", // 30-60Hz付近の重量感

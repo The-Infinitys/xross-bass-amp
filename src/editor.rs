@@ -23,8 +23,8 @@ fn get_vibrant_rainbow_color(index: usize, total: usize) -> Color32 {
 }
 
 pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
-    let width = 910;
-    let height = 620;
+    let width = 980;
+    let height = 560;
     let bg = Background::new();
 
     let editor = EguiEditor::new((width, height), move |egui_ctx, _state| {
@@ -98,7 +98,12 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                                 ui.horizontal(|ui| {
                                     ui.spacing_mut().item_spacing.x = 2.0;
                                     // TIGHT, SAG に加え、LIMITER もノブとして配置
-                                    for k in [&params.tight, &params.sag, &params.limiter_on] {
+                                    for k in [
+                                        &params.tight,
+                                        &params.sag,
+                                        &params.limiter_on,
+                                        &params.noise_gate,
+                                    ] {
                                         ui.add(Knob::new(
                                             k,
                                             get_vibrant_rainbow_color(color_idx, total_knobs),
@@ -112,7 +117,7 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                         ui.add_space(6.0);
 
                         // --- 下段: キャビネットセクション ---
-                        let cab_height = ui.available_height();
+                        let cab_height = ui.available_height() - 20.0;
                         draw_section_with_height(
                             ui,
                             "CABINET & DUAL MICROPHONES",
@@ -212,7 +217,7 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                                     ui.vertical_centered(|ui| {
                                         let visualizer_area = ui.available_height() - 5.0;
                                         SpeakerVisualizer::new(&params)
-                                            .draw(ui, visualizer_area.at_most(280.0));
+                                            .draw(ui, visualizer_area.at_most(260.0));
                                     });
                                 });
                             },
