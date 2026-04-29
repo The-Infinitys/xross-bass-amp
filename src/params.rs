@@ -1,7 +1,7 @@
 use truce::{Params, params::FloatParam, params::IntParam};
 
 #[derive(Params)]
-pub struct XrossGuitarAmpParams {
+pub struct XrossBassAmpParams {
     // --- 1. Gain Section ---
     #[param(
         name = "Input Gain",

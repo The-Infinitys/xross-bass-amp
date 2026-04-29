@@ -1,9 +1,9 @@
 use crate::modules::filter::{Biquad, FilterType};
-use crate::params::XrossGuitarAmpParams;
+use crate::params::XrossBassAmpParams;
 use std::sync::Arc;
 
 pub struct EqProcessor {
-    pub params: Arc<XrossGuitarAmpParams>,
+    pub params: Arc<XrossBassAmpParams>,
 
     // フィルタ群
     low_filter: Biquad,
@@ -17,7 +17,7 @@ pub struct EqProcessor {
 }
 
 impl EqProcessor {
-    pub fn new(params: Arc<XrossGuitarAmpParams>) -> Self {
+    pub fn new(params: Arc<XrossBassAmpParams>) -> Self {
         let sr = 44100.0;
         Self {
             params,

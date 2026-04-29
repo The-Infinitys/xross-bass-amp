@@ -1,5 +1,5 @@
 [package]
-name = "xross-guitar-amp"
+name = "xross-bass-amp"
 version = "2.0.0"
 edition = "2024"
 license = "MIT"
@@ -8,7 +8,7 @@ license = "MIT"
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "xross-guitar-amp-standalone"
+name = "xross-bass-amp-standalone"
 path = "src/main.rs"
 required-features = ["standalone"]
 

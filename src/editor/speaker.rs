@@ -1,12 +1,12 @@
-use crate::params::XrossGuitarAmpParams;
+use crate::params::XrossBassAmpParams;
 use egui::{self, Color32, Pos2, Stroke, Vec2};
 
 pub struct SpeakerVisualizer<'a> {
-    params: &'a XrossGuitarAmpParams,
+    params: &'a XrossBassAmpParams,
 }
 
 impl<'a> SpeakerVisualizer<'a> {
-    pub fn new(params: &'a XrossGuitarAmpParams) -> Self {
+    pub fn new(params: &'a XrossBassAmpParams) -> Self {
         Self { params }
     }
 

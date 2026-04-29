@@ -1,4 +1,4 @@
-use xross_guitar_amp::Plugin;
+use xross_bass_amp::Plugin;
 
 fn main() {
     truce_standalone::run::<Plugin>();

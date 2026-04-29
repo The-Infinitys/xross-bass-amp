@@ -1,5 +1,5 @@
 use crate::modules::filter::{Biquad, FilterType};
-use crate::params::XrossGuitarAmpParams;
+use crate::params::XrossBassAmpParams;
 use std::sync::Arc;
 
 const PHASE_DELAY_SIZE: usize = 2048;
@@ -7,7 +7,7 @@ const PHASE_DELAY_MASK: usize = PHASE_DELAY_SIZE - 1;
 const MAX_BUFFER_SIZE: usize = 192000;
 
 pub struct CabProcessor {
-    pub params: Arc<XrossGuitarAmpParams>,
+    pub params: Arc<XrossBassAmpParams>,
 
     // --- フィルタ群 ---
     mic_a_filters: [Biquad; 5],
@@ -43,7 +43,7 @@ pub struct CabProcessor {
 }
 
 impl CabProcessor {
-    pub fn new(params: Arc<XrossGuitarAmpParams>) -> Self {
+    pub fn new(params: Arc<XrossBassAmpParams>) -> Self {
         let sr = 44100.0;
         Self {
             params,

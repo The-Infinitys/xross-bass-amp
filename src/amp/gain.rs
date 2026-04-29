@@ -1,4 +1,4 @@
-use crate::params::XrossGuitarAmpParams;
+use crate::params::XrossBassAmpParams;
 use std::f32::consts::PI;
 use std::sync::Arc;
 
@@ -26,7 +26,7 @@ impl Biquad {
 }
 
 pub struct GainProcessor {
-    pub params: Arc<XrossGuitarAmpParams>,
+    pub params: Arc<XrossBassAmpParams>,
     pre_hp: f32,
     slew_state: f32,
     dc_block: f32,
@@ -41,7 +41,7 @@ pub struct GainProcessor {
 }
 
 impl GainProcessor {
-    pub fn new(params: Arc<XrossGuitarAmpParams>) -> Self {
+    pub fn new(params: Arc<XrossBassAmpParams>) -> Self {
         Self {
             params,
             pre_hp: 0.0,

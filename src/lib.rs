@@ -6,12 +6,12 @@ mod params;
 mod plugin;
 mod utils;
 
-use amp::XrossGuitarAmp;
-use params::XrossGuitarAmpParams;
+use amp::XrossBassAmp;
+use params::XrossBassAmpParams;
 
 truce::plugin! {
-    logic: XrossGuitarAmp,
-    params: XrossGuitarAmpParams,
+    logic: XrossBassAmp,
+    params: XrossBassAmpParams,
     bus_layouts: [BusLayout::new()
         .with_input("Main", ChannelConfig::Mono)
         .with_output("Main", ChannelConfig::Stereo)

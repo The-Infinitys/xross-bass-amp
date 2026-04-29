@@ -1,8 +1,8 @@
-# Xross Guitar Amp
+# Xross Bass Amp
 
 ![Thumbnail](thumbnail.png)
 
-Xross Guitar Amp is a modern, high-gain guitar amplifier plugin built with Rust and the [truce-audio](https://github.com/truce-audio/truce) framework. It features a unique distortion engine, physical cabinet modeling with dual-microphone positioning, and a vibrant, interactive GUI.
+Xross Bass Amp is a modern, high-gain bass amplifier plugin built with Rust and the [truce-audio](https://github.com/truce-audio/truce) framework. It features a unique distortion engine, physical cabinet modeling with dual-microphone positioning, and a vibrant, interactive GUI.
 
 ## Features
 
@@ -43,8 +43,8 @@ Ensure you have [Rust](https://rustup.rs/) and [Cargo](https://doc.rust-lang.org
 
 ```bash
 # Clone the repository
-git clone https://github.com/The-Infinitys/xross-guitar-amp.git
-cd xross-guitar-amp
+git clone https://github.com/The-Infinitys/xross-bass-amp.git
+cd xross-bass-amp
 
 # Install the plugin (Standalone / VST3 / CLAP)
 cargo truce install
@@ -56,4 +56,4 @@ The resulting binaries will be located in `target/release/`.
 Developed by **The Infinitys**.
 
 *   Email: [the.infinity.s.infinity@gmail.com](mailto:the.infinity.s.infinity@gmail.com)
-*   GitHub: [https://github.com/The-Infinitys/xross-guitar-amp](https://github.com/The-Infinitys/xross-guitar-amp)
+*   GitHub: [https://github.com/The-Infinitys/xross-bass-amp](https://github.com/The-Infinitys/xross-bass-amp)

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use truce::core::Editor;
 use truce_egui::EguiEditor;
 
-use crate::params::XrossGuitarAmpParams;
+use crate::params::XrossBassAmpParams;
 mod background;
 mod knob;
 mod linear;
@@ -20,7 +20,7 @@ fn get_vibrant_rainbow_color(index: usize, total: usize) -> Color32 {
     let h = (index as f32 / total as f32) * 0.85;
     Hsva::new(h, 1.0, 1.0, 1.0).into()
 }
-pub fn create_editor(params: Arc<XrossGuitarAmpParams>) -> Box<dyn Editor> {
+pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
     // ターゲットサイズを定義（このサイズをベースに描画）
     let width = 840;
     let height = 600;
