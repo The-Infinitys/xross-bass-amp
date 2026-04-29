@@ -14,16 +14,14 @@ pub struct CabProcessor {
     mic_b_filters: [Biquad; 5],
 
     // 物理特性
-    impedance_resonance: Biquad,
-    presence_shelf: Biquad,
-    cabinet_thump: Biquad, // 低域の押し出し
-    box_resonance: Biquad, // 箱鳴り (200-400Hz付近)
+    impedance_resonance: Biquad, // スピーカーの自己共振
+    port_resonance: Biquad,      // バスレフポートの共鳴 (ベース特有)
+    cabinet_thump: Biquad,       // 100Hz付近のパンチ
+    box_resonance: Biquad,       // 箱鳴り
     tight_filter: Biquad,
 
-    // 位相を散らすためのAll-pass
+    // 位相特性
     phase_smearer: [Biquad; 2],
-
-    // スピーカーコーンの分割振動
     cone_character: [Biquad; 4],
     internal_standing_wave: Biquad,
 
@@ -39,7 +37,6 @@ pub struct CabProcessor {
     last_speaker_size: f32,
     last_speaker_count: i64,
     last_mic_params: [f32; 4],
-    last_eq_extras: [f32; 2],
 }
 
 impl CabProcessor {
@@ -50,7 +47,7 @@ impl CabProcessor {
             mic_a_filters: std::array::from_fn(|_| Biquad::new(sr)),
             mic_b_filters: std::array::from_fn(|_| Biquad::new(sr)),
             impedance_resonance: Biquad::new(sr),
-            presence_shelf: Biquad::new(sr),
+            port_resonance: Biquad::new(sr),
             cabinet_thump: Biquad::new(sr),
             box_resonance: Biquad::new(sr),
             tight_filter: Biquad::new(sr),
@@ -65,13 +62,11 @@ impl CabProcessor {
             last_speaker_size: -1.0,
             last_speaker_count: -1,
             last_mic_params: [-1.0; 4],
-            last_eq_extras: [-1.0; 2],
         }
     }
 
     pub fn initialize(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate;
-        // すべてのフィルタのサンプリングレートを更新
         self.update_all_filter_rates(sample_rate);
         self.room_delay_buffer.resize(sample_rate as usize, 0.0);
         self.reset();
@@ -91,7 +86,7 @@ impl CabProcessor {
             f.set_sample_rate(sr);
         }
         self.impedance_resonance.set_sample_rate(sr);
-        self.presence_shelf.set_sample_rate(sr);
+        self.port_resonance.set_sample_rate(sr);
         self.cabinet_thump.set_sample_rate(sr);
         self.box_resonance.set_sample_rate(sr);
         self.tight_filter.set_sample_rate(sr);
@@ -99,7 +94,6 @@ impl CabProcessor {
     }
 
     pub fn reset(&mut self) {
-        // 各フィルタの内部状態（遅延要素）をクリア
         self.phase_delay_buffer_b.fill(0.0);
         self.room_delay_buffer.fill(0.0);
         self.write_idx_phase = 0;
@@ -113,112 +107,85 @@ impl CabProcessor {
         let a_a = self.params.mic_a_axis.value();
         let d_b = self.params.mic_b_distance.value();
         let a_b = self.params.mic_b_axis.value();
-        let res_val = self.params.resonance.value();
-        let pres_val = self.params.presence.value();
 
-        // 変更検知（閾値による判定）
+        // いずれかのパラメータに変更があれば再計算
         if (s_size - self.last_speaker_size).abs() > 0.001
             || s_count != self.last_speaker_count
-            || (d_a - self.last_mic_params[0]).abs() > 0.001
-            || (res_val - self.last_eq_extras[0]).abs() > 0.001
+            || (self.last_mic_params[0] - d_a).abs() > 0.001
+            || (self.last_mic_params[1] - a_a).abs() > 0.001
+            || (self.last_mic_params[2] - d_b).abs() > 0.001
+            || (self.last_mic_params[3] - a_b).abs() > 0.001
         {
-            let speaker_res_freq = 82.0 * (12.0 / s_size);
+            // --- ベースキャビネット特有の低域共振計算 ---
+            let speaker_res_freq = 55.0 * (12.0 / s_size);
             let count_scale = (s_count as f32).sqrt();
 
-            // 1. パワーアンプとの相互作用
-            self.impedance_resonance.set_params(
-                FilterType::Peaking(res_val * 2.5),
-                speaker_res_freq,
-                1.2,
-            );
-            self.presence_shelf
-                .set_params(FilterType::HighShelf(pres_val * 1.8), 3800.0, 0.7);
+            // 1. スピーカー自己共振
+            self.impedance_resonance
+                .set_params(FilterType::Peaking(4.0), speaker_res_freq, 1.5);
 
-            // 2. キャビネットの物理的共鳴
-            // 箱のサイズに応じた中低域の溜まり
-            let box_res_freq = 250.0 * (12.0 / s_size);
-            self.box_resonance.set_params(
-                FilterType::Peaking(2.0 * count_scale),
-                box_res_freq,
+            // 2. ポート共鳴 (Bass Reflex Port)
+            self.port_resonance.set_params(
+                FilterType::Peaking(3.0 * count_scale),
+                speaker_res_freq * 0.8,
                 2.0,
             );
 
-            let internal_res = 1150.0 * (12.0 / s_size);
-            self.internal_standing_wave
-                .set_params(FilterType::Peaking(-5.0), internal_res, 3.0);
+            // 3. キャビネット内部の定在波
+            let box_res_freq = 180.0 * (12.0 / s_size);
+            self.box_resonance
+                .set_params(FilterType::Peaking(2.0), box_res_freq, 1.0);
 
-            // 3. 位相の拡散 (All-pass) - アナログ的な曖昧さを出す
-            self.phase_smearer[0].set_params(FilterType::AllPass, 1200.0, 0.5);
-            self.phase_smearer[1].set_params(FilterType::AllPass, 3500.0, 0.5);
+            // 4. Cone Breakup
+            self.cone_character[0].set_params(FilterType::Peaking(-3.0), 800.0, 1.0);
+            self.cone_character[1].set_params(FilterType::Peaking(4.0), 2500.0, 1.5);
+            self.cone_character[2].set_params(FilterType::Peaking(-12.0), 5000.0, 2.0);
 
-            // 4. スピーカー個体差 (Cone Breakup)
-            self.cone_character[0].set_params(FilterType::Peaking(-4.0), 850.0, 1.5);
-            self.cone_character[1].set_params(FilterType::Peaking(3.0), 2200.0, 1.0);
-            self.cone_character[2].set_params(FilterType::Peaking(4.5), 3800.0, 2.0);
-            self.cone_character[3].set_params(FilterType::Peaking(-6.0), 6500.0, 2.5);
+            // 5. Mic A (Dynamic - 芯のあるアタック)
+            let prox_a = (1.0 - d_a).powi(2) * 15.0;
+            self.mic_a_filters[0].set_params(FilterType::Peaking(prox_a), 60.0, 0.7);
+            let click_a = (1.0 - a_a) * 6.0;
+            self.mic_a_filters[1].set_params(FilterType::Peaking(click_a), 3000.0, 1.2);
 
-            // 5. Mic A (Dynamic) - 近接効果と軸外減衰
-            let prox_a = (1.0 - d_a).powi(3) * 12.0;
-            self.mic_a_filters[0].set_params(
-                FilterType::Peaking(prox_a),
-                speaker_res_freq * 1.1,
-                0.8,
+            // 6. Mic B (Ribbon - 太い低域)
+            let prox_b = (1.0 - d_b).powi(2) * 10.0;
+            self.mic_b_filters[0].set_params(FilterType::Peaking(prox_b), 100.0, 0.5);
+            self.mic_b_filters[4].set_params(
+                FilterType::LowPass,
+                8000.0 * (1.0 - a_b * 0.5),
+                0.707,
             );
-            let edge_a = (1.0 - a_a) * 8.0;
-            self.mic_a_filters[2].set_params(FilterType::Peaking(edge_a), 3200.0, 1.0);
-            let hc_a = 15000.0 * (1.0 - a_a * 0.5) * (1.0 - d_a * 0.15);
-            self.mic_a_filters[4].set_params(FilterType::LowPass, hc_a.max(3000.0), 0.707);
 
-            // 6. Mic B (Ribbon) - よりダークでウォームな特性
-            let prox_b = (1.0 - d_b).powi(2) * 18.0;
-            self.mic_b_filters[0].set_params(
-                FilterType::Peaking(prox_b),
-                speaker_res_freq * 0.9,
-                0.6,
-            );
-            let dark_b = (1.0 - d_b * 0.5) * -4.0;
-            self.mic_b_filters[3].set_params(FilterType::HighShelf(dark_b), 4000.0, 0.7);
-            let hc_b = 11000.0 * (1.0 - a_b * 0.7) * (1.0 - d_b * 0.3);
-            self.mic_b_filters[4].set_params(FilterType::LowPass, hc_b.max(2000.0), 0.707);
-
-            // 7. Overall Tightness
-            self.cabinet_thump
-                .set_params(FilterType::Peaking(3.0 * count_scale), 110.0, 2.0);
-            self.tight_filter
-                .set_params(FilterType::HighPass, 75.0, 0.6);
-
+            // キャッシュ更新
             self.last_speaker_size = s_size;
             self.last_speaker_count = s_count;
             self.last_mic_params = [d_a, a_a, d_b, a_b];
-            self.last_eq_extras = [res_val, pres_val];
-        }
-    }
-
-    fn apply_speaker_physics(&self, input: f32) -> f32 {
-        // スピーカーの物理的な振幅限界によるソフトサチュレーション
-        // ＋ 非対称な磁気回路の挙動
-        let drive = 1.1;
-        if input > 0.0 {
-            (input * drive).tanh()
-        } else {
-            (input * drive * 0.95).tanh() * 1.02
         }
     }
 
     pub fn process(&mut self, input: f32) -> (f32, f32) {
+        let bypass_mix = self.params.cab_bypass.value(); // 0.0 = CAB, 1.0 = DI
+
+        // bypass_mix が 1.0 (完全なDI) の場合は無駄な処理をスキップ
+        if bypass_mix >= 0.999 {
+            return (input, input);
+        }
+
         self.update_coefficients();
 
-        // 1. スピーカーダイナミクス
-        let mut sig = self.apply_speaker_physics(input);
+        // --- キャビネットシミュレーション処理 ---
 
-        // 2. 共通フィルタリング
+        // 1. スピーカーの物理的飽和
+        let mut sig = if input > 0.0 {
+            input.tanh()
+        } else {
+            (input * 0.98).tanh() * 1.02
+        };
+
+        // 2. 共通物理フィルタリング
         sig = self.impedance_resonance.process(sig);
-        sig = self.presence_shelf.process(sig);
+        sig = self.port_resonance.process(sig);
         sig = self.box_resonance.process(sig);
-        sig = self.cabinet_thump.process(sig);
-        sig = self.internal_standing_wave.process(sig);
-        sig = self.tight_filter.process(sig);
-
         for ap in &mut self.phase_smearer {
             sig = ap.process(sig);
         }
@@ -237,59 +204,37 @@ impl CabProcessor {
             sig_b = f.process(sig_b);
         }
 
-        // 4. マイク間位相干渉 (Time Alignment)
-        // 距離による微小な遅延差 (1ms ≒ 34cm)
-        let delay_a = self.params.mic_a_distance.value() * 2.5;
-        let delay_b = self.params.mic_b_distance.value() * 5.0;
-        let diff_samples = (delay_b - delay_a).abs() * 0.001 * self.sample_rate;
-
-        let delay_int = diff_samples as usize;
-        let frac = diff_samples - (delay_int as f32);
-
+        // 4. マイクの距離による遅延
+        let delay_samples = (self.params.mic_b_distance.value() * 10.0) as usize;
         self.phase_delay_buffer_b[self.write_idx_phase] = sig_b;
-        let r1 = (self.write_idx_phase + PHASE_DELAY_SIZE - delay_int) & PHASE_DELAY_MASK;
-        let r2 = (r1 + PHASE_DELAY_SIZE - 1) & PHASE_DELAY_MASK;
-
-        // 線形補間
-        sig_b = self.phase_delay_buffer_b[r1] * (1.0 - frac) + self.phase_delay_buffer_b[r2] * frac;
+        let read_idx = (self.write_idx_phase + PHASE_DELAY_SIZE - delay_samples) & PHASE_DELAY_MASK;
+        sig_b = self.phase_delay_buffer_b[read_idx];
         self.write_idx_phase = (self.write_idx_phase + 1) & PHASE_DELAY_MASK;
 
-        // 5. Stereo Mixing & MS-like Spread
-        // マイクAをセンター、マイクBを少しサイドに振ることで実在感を出す
-        let mut out_l = sig_a * 0.7 + sig_b * 0.3;
-        let mut out_r = sig_a * 0.7 - sig_b * 0.1; // わずかな位相差による広がり
+        // 5. ステレオミックス
+        let mut out_l = sig_a * 0.8 + sig_b * 0.4;
+        let mut out_r = sig_a * 0.8 - sig_b * 0.2;
 
-        // 6. Early Reflections (Room Simulation)
+        // 6. Room Early Reflections
         let room_mix = self.params.room_mix.value();
-        if room_mix > 0.0 {
-            let room_size = self.params.room_size.value();
-
-            // 左右で異なるタップ時間を設定し、ステレオ感を強調
-            let taps_l = [0.011, 0.023, 0.041];
-            let taps_r = [0.013, 0.027, 0.048];
-
-            let mut reflections_l = 0.0;
-            let mut reflections_r = 0.0;
-
+        if room_mix > 0.001 {
             let buf_len = self.room_delay_buffer.len();
-            for i in 0..3 {
-                let dl = ((taps_l[i] + room_size * 0.05) * self.sample_rate) as usize;
-                let dr = ((taps_r[i] + room_size * 0.05) * self.sample_rate) as usize;
+            let delay_time = (0.02 * self.sample_rate) as usize;
+            let reflection =
+                self.room_delay_buffer[(self.write_idx_room + buf_len - delay_time) % buf_len];
 
-                reflections_l +=
-                    self.room_delay_buffer[(self.write_idx_room + buf_len - dl) % buf_len];
-                reflections_r +=
-                    self.room_delay_buffer[(self.write_idx_room + buf_len - dr) % buf_len];
-            }
-
-            out_l += reflections_l * room_mix * 0.4;
-            out_r += reflections_r * room_mix * 0.4;
+            out_l += reflection * room_mix * 0.5;
+            out_r += reflection * room_mix * 0.5;
 
             self.room_delay_buffer[self.write_idx_room] = (sig_a + sig_b) * 0.5;
             self.write_idx_room = (self.write_idx_room + 1) % buf_len;
         }
 
-        // 最終ゲイン補正 (アナログの飽和感を考慮して少し持ち上げる)
-        (out_l * 1.25, out_r * 1.25)
+        // --- DI と CAB の最終ミックス ---
+        // bypass_mix = 0.0 なら CABのみ、1.0 なら DIのみ
+        let final_l = (input * bypass_mix) + (out_l * (1.0 - bypass_mix));
+        let final_r = (input * bypass_mix) + (out_r * (1.0 - bypass_mix));
+
+        (final_l, final_r)
     }
 }

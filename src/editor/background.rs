@@ -16,7 +16,7 @@ impl Background {
         let time = ui.input(|i| i.time);
 
         // 1. ベース背景（深い紺色）
-        painter.rect_filled(rect, 0.0, Color32::from_rgb(5, 5, 8));
+        painter.rect_filled(rect, 0.0, Color32::from_rgb(250, 255, 255));
 
         let center = rect.center();
         let t = time as f32;
@@ -39,7 +39,7 @@ impl Background {
             let hue = (i as f32 / 12.0 + t * 0.05) % 1.0;
 
             // HSVからRGBへ変換
-            let base_color = self.hsv_to_rgb(hue, 0.8, 0.5);
+            let base_color = self.hsv_to_rgb(hue, 0.8, 1.0);
             let glow_radius = rect.width() * 0.25;
 
             self.draw_glow_circle(painter, pos, glow_radius, base_color);
