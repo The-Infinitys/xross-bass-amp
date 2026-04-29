@@ -1,0 +1,13 @@
+[vendor]
+name = "The Infinity's"
+id = "org.infinite"
+url = "https://github.com/The-Infinitys/xross-guitar-amp"
+au_manufacturer = "INFI"
+
+[[plugin]]
+name = "XrossGuitarAmp"
+bundle_id = "xrossguitaramp"
+crate = "xross-guitar-amp"
+category = "effect"
+fourcc = "XGRA"
+au_tag = "Effects"

@@ -1,103 +1,31 @@
-use nih_plug::plugin::Plugin;
-use nih_plug::prelude::*;
+use crate::amp::XrossGuitarAmp;
+use truce::prelude::*;
 
-use crate::XrossBassAmp;
-use crate::editor::create_editor;
-
-impl Plugin for XrossBassAmp {
-    const NAME: &'static str = "Xross Bass Amp";
-
-    const VENDOR: &'static str = "The Infinitys";
-
-    const URL: &'static str = "https://github.com/The-Infinitys/xross-bass-amp";
-
-    const EMAIL: &'static str = "the.infinity.s.infinity@gmail.com";
-
-    const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
-    fn params(&self) -> std::sync::Arc<dyn nih_plug::prelude::Params> {
-        self.params()
+impl PluginLogic for XrossGuitarAmp {
+    fn reset(&mut self, sample_rate: f64, max_block_size: usize) {
+        self.initialize_truce(sample_rate, max_block_size);
     }
-
-    const MIDI_INPUT: MidiConfig = MidiConfig::None;
-
-    const MIDI_OUTPUT: MidiConfig = MidiConfig::None;
-
-    const SAMPLE_ACCURATE_AUTOMATION: bool = false;
-
-    const HARD_REALTIME_ONLY: bool = false;
-
-    fn task_executor(&mut self) -> TaskExecutor<Self> {
-        // In the default implementation we can simply ignore the value
-        Box::new(|_| ())
-    }
-
-    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        create_editor(self.params())
-    }
-
-    fn initialize(
-        &mut self,
-        audio_io_layout: &AudioIOLayout,
-        buffer_config: &BufferConfig,
-        context: &mut impl InitContext<Self>,
-    ) -> bool {
-        self.initialize(audio_io_layout, buffer_config, context)
-    }
-
-    fn reset(&mut self) {
-        self.reset();
-    }
-
-    fn deactivate(&mut self) {}
-
-    const AUDIO_IO_LAYOUTS: &'static [nih_plug::prelude::AudioIOLayout] = &[AudioIOLayout {
-        main_input_channels: NonZeroU32::new(1),
-        main_output_channels: NonZeroU32::new(2),
-        ..AudioIOLayout::const_default()
-    }];
-    type SysExMessage = ();
-
-    type BackgroundTask = ();
 
     fn process(
         &mut self,
-        buffer: &mut Buffer,
-        aux: &mut AuxiliaryBuffers,
-        context: &mut impl ProcessContext<Self>,
+        buffer: &mut AudioBuffer,
+        events: &EventList,
+        _context: &mut ProcessContext,
     ) -> ProcessStatus {
-        self.process(buffer, aux, context)
+        events
+            .iter()
+            .map(|event| &event.body)
+            .for_each(|event| match event {
+                EventBody::ParamChange { id, value } => {
+                    self.params().set_normalized(*id, *value);
+                }
+                _ => {}
+            });
+
+        self.process_truce(buffer)
+    }
+
+    fn custom_editor(&self) -> Option<Box<dyn Editor>> {
+        Some(self.ui())
     }
 }
-
-impl Vst3Plugin for XrossBassAmp {
-    const VST3_CLASS_ID: [u8; 16] = *b"Xross Bass Amp!!";
-
-    const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[
-        Vst3SubCategory::Distortion,
-        Vst3SubCategory::Dynamics,
-        Vst3SubCategory::Fx,
-        Vst3SubCategory::Custom("bass"),
-    ];
-}
-impl ClapPlugin for XrossBassAmp {
-    const CLAP_ID: &'static str = "Xross Bass Amp";
-
-    const CLAP_DESCRIPTION: Option<&'static str> = Some("Modern Bass Amplifier");
-
-    const CLAP_MANUAL_URL: Option<&'static str> =
-        Some("https://github.com/The-Infinitys/xross-bass-amp");
-
-    const CLAP_SUPPORT_URL: Option<&'static str> =
-        Some("https://github.com/The-Infinitys/xross-bass-amp/issues");
-
-    const CLAP_FEATURES: &'static [ClapFeature] = &[
-        ClapFeature::AudioEffect,
-        ClapFeature::Distortion,
-        ClapFeature::Custom("bass"),
-        ClapFeature::Custom("amp"),
-    ];
-}
-
-nih_export_clap!(XrossBassAmp);
-nih_export_vst3!(XrossBassAmp);

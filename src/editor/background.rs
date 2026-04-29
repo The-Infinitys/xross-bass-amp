@@ -1,4 +1,4 @@
-use nih_plug_egui::egui::{
+use egui::{
     self, Color32, Pos2,
     epaint::{Mesh, Shape, Vertex},
 };
@@ -9,81 +9,59 @@ impl Background {
     pub fn new() -> Self {
         Self {}
     }
+
     pub fn draw(&self, ui: &mut egui::Ui) {
         let rect = ui.max_rect();
         let painter = ui.painter();
         let time = ui.input(|i| i.time);
 
-        // 1. 背景はあえて少しだけ青みを入れたクリアな白
-        painter.rect_filled(rect, 0.0, Color32::from_rgb(245, 245, 250));
+        // 1. ベース背景（深い紺色）
+        painter.rect_filled(rect, 0.0, Color32::from_rgb(5, 5, 8));
 
         let center = rect.center();
         let t = time as f32;
 
-        // 2. ビビッドなカラーパレット（高彩度）
-        let colors = [
-            Color32::from_rgb(255, 0, 100),  // ネオンマゼンタ
-            Color32::from_rgb(0, 200, 255),  // シアンブルー
-            Color32::from_rgb(255, 200, 0),  // ビビッドイエロー
-            Color32::from_rgb(100, 255, 0),  // ライムグリーン
-            Color32::from_rgb(150, 50, 255), // エレクトリックパープル
-        ];
-
+        // 2. 虹色の「光の球」を描画
         for i in 0..12 {
-            // 密度を上げるため個数はあえて絞り、一つを大きくする
-            let seed = i as f32 * 847.12;
+            // 軌道計算
+            let x_radius = rect.width() * 0.3;
+            let y_radius = rect.height() * 0.2;
+            let phase = i as f32 * (std::f32::consts::TAU / 12.0);
 
-            // 画面をダイナミックに動く軌道
-            let x_radius = rect.width() * 0.45;
-            let y_radius = rect.height() * 0.4;
+            let x = center.x
+                + (t * 0.4 + phase).cos() * x_radius
+                + (t * 0.6 + phase * 0.5).sin() * 50.0;
+            let y = center.y
+                + (t * 0.3 + phase).sin() * y_radius
+                + (t * 0.5 + phase * 0.8).cos() * 30.0;
 
-            let x = center.x + (t * 0.4 + seed).cos() * x_radius;
-            let y = center.y + (t * 0.3 + seed * 1.5).sin() * y_radius;
             let pos = Pos2::new(x, y);
+            let hue = (i as f32 / 12.0 + t * 0.05) % 1.0;
 
-            let base_color = colors[i % colors.len()];
+            // HSVからRGBへ変換
+            let base_color = self.hsv_to_rgb(hue, 0.8, 0.5);
+            let glow_radius = rect.width() * 0.25;
 
-            // パルスに合わせて大きさを大胆に変化させる
-            let pulse = (t * 0.6 + seed).sin().abs();
-            let glow_radius = rect.width() * (0.3 + pulse * 0.2);
-
-            // 乗算効果を出すため、アルファ値は「しっかり」かける（100〜180）
-            let alpha = (pulse * 80.0) as u8;
-
-            let color_with_alpha = Color32::from_rgba_unmultiplied(
-                base_color.r(),
-                base_color.g(),
-                base_color.b(),
-                alpha,
-            );
-
-            self.draw_multiply_circle(painter, pos, glow_radius, color_with_alpha);
+            self.draw_glow_circle(painter, pos, glow_radius, base_color);
         }
 
+        // 毎フレーム再描画を要求
         ui.ctx().request_repaint();
     }
 
-    fn draw_multiply_circle(
-        &self,
-        painter: &egui::Painter,
-        center: Pos2,
-        radius: f32,
-        color: Color32,
-    ) {
+    fn draw_glow_circle(&self, painter: &egui::Painter, center: Pos2, radius: f32, color: Color32) {
         let mut mesh = Mesh::default();
-        let n_points = 40; // 滑らかな円
+        let n_points = 24;
+
+        let center_color = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 40);
+        let transparent = Color32::TRANSPARENT;
 
         let center_idx = mesh.vertices.len() as u32;
-
-        // 中心を一番ビビッドに
         mesh.vertices.push(Vertex {
             pos: center,
             uv: Pos2::ZERO,
-            color: color,
+            color: center_color,
         });
-
-        // 外側は「同じ色のまま透明」にすることで、白背景と綺麗に馴染ませる
-        let edge_color = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 0);
 
         for k in 0..n_points {
             let angle = k as f32 * std::f32::consts::TAU / n_points as f32;
@@ -91,7 +69,7 @@ impl Background {
             mesh.vertices.push(Vertex {
                 pos: center + offset,
                 uv: Pos2::ZERO,
-                color: edge_color,
+                color: transparent,
             });
 
             mesh.indices.push(center_idx);
@@ -100,5 +78,17 @@ impl Background {
         }
 
         painter.add(Shape::Mesh(mesh.into()));
+    }
+
+    fn hsv_to_rgb(&self, h: f32, s: f32, v: f32) -> Color32 {
+        let f = |n: f32| {
+            let k = (n + h * 6.0) % 6.0;
+            v - v * s * 0.0f32.max(1.0f32.min(k.min(4.0 - k)))
+        };
+        Color32::from_rgb(
+            (f(5.0) * 255.0) as u8,
+            (f(3.0) * 255.0) as u8,
+            (f(1.0) * 255.0) as u8,
+        )
     }
 }

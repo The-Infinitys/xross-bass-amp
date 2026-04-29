@@ -1,19 +1,23 @@
 use crate::modules::filter::{Biquad, FilterType};
-use crate::params::XrossBassAmpParams;
+use crate::params::XrossGuitarAmpParams;
 use std::sync::Arc;
 
 pub struct EqProcessor {
-    pub params: Arc<XrossBassAmpParams>,
+    pub params: Arc<XrossGuitarAmpParams>,
+
+    // フィルタ群
     low_filter: Biquad,
     mid_filter: Biquad,
     high_filter: Biquad,
     presence_filter: Biquad,
     resonance_filter: Biquad,
+
+    // パラメータ変更検知用キャッシュ
     last_eq_values: [f32; 5],
 }
 
 impl EqProcessor {
-    pub fn new(params: Arc<XrossBassAmpParams>) -> Self {
+    pub fn new(params: Arc<XrossGuitarAmpParams>) -> Self {
         let sr = 44100.0;
         Self {
             params,
@@ -22,11 +26,13 @@ impl EqProcessor {
             high_filter: Biquad::new(sr),
             presence_filter: Biquad::new(sr),
             resonance_filter: Biquad::new(sr),
+            // 初期値とズラしておくことで初回に必ず計算させる
             last_eq_values: [-999.0; 5],
         }
     }
 
     pub fn initialize(&mut self, sample_rate: f32) {
+        // 全フィルタのサンプリングレートを更新
         self.low_filter = Biquad::new(sample_rate);
         self.mid_filter = Biquad::new(sample_rate);
         self.high_filter = Biquad::new(sample_rate);
@@ -45,64 +51,56 @@ impl EqProcessor {
     }
 
     fn update_coefficients(&mut self) {
-        // パラメータ借用を最小限にする
-        let (l, m, h, p, r) = {
-            let eq = &self.params.eq_section;
-            (
-                eq.low.value(),
-                eq.mid.value(),
-                eq.high.value(),
-                eq.presence.value(),
-                eq.resonance.value(),
-            )
-        };
+        let l = self.params.low.value();
+        let m = self.params.mid.value();
+        let h = self.params.high.value();
+        let p = self.params.presence.value();
+        let r = self.params.resonance.value();
 
+        // 変更があった場合のみ重いフィルタ係数計算を実行
         if (l - self.last_eq_values[0]).abs() > 0.01
             || (m - self.last_eq_values[1]).abs() > 0.01
             || (h - self.last_eq_values[2]).abs() > 0.01
             || (p - self.last_eq_values[3]).abs() > 0.01
             || (r - self.last_eq_values[4]).abs() > 0.01
         {
-            // --- モダンメタル・ベース・セッティング ---
+            // --- ギターアンプとして「美味しい」周波数選定 ---
 
-            // Resonance (Sub-Bass): 60Hz.
-            // 45Hzだと低すぎてスピーカーが飛ばし気味になるため、
-            // 60Hz付近をPeakingで調整し、重低音の「圧」をコントロール。
-            self.resonance_filter
-                .set_params(FilterType::Peaking(r * 0.8), 60.0, 1.2);
-
-            // Low: 120Hz.
-            // 80Hzより少し上の120Hzをシェルフで動かすことで、
-            // キックドラムとの住み分けをしながらベースの「ボディ」を太くします。
+            // Low: 100Hz よりも 150Hz 辺りにピークを持たせると「厚み」が出る
             self.low_filter
-                .set_params(FilterType::LowShelf(l), 120.0, 0.707);
+                .set_params(FilterType::LowShelf(l), 150.0, 0.707);
 
-            // Mid: 350Hz - 500Hz (Variable focus).
-            // モダンメタルではこの付近を「削る（Scoop）」ことで、歪みの濁りを取り、
-            // 逆にブーストすると「ゴリッ」としたパーカッシブな質感が出ます。
-            // Q値を少し広め(0.4)にして自然な変化に。
+            // Mid: 750Hz はモダン。500Hz-800Hz 辺りの変化が「粘り」を生む。
+            // Q値を少し広め(0.4)にして、不自然なピーク感を抑える
             self.mid_filter
-                .set_params(FilterType::Peaking(m), 450.0, 0.4);
+                .set_params(FilterType::Peaking(m), 700.0, 0.4);
 
-            // High: 1.5kHz - 2.5kHz.
-            // ダークグラス系サウンドの核心。ピックのガリガリ音（Clank）が出る帯域。
-            // ここをブーストすることで、ハイゲインギターの中でもベースが埋もれません。
+            // High: 3kHz は「芯」の部分。
             self.high_filter
-                .set_params(FilterType::Peaking(h), 2200.0, 0.8);
+                .set_params(FilterType::HighShelf(h), 3000.0, 0.707);
 
-            // Presence: 5kHz High Shelf.
-            // 指が弦を擦る音や、ディストーションのジリジリした「エッジ」を調整。
+            // Presence: 6kHz〜8kHz。ここが「ヌケ」の正体。
+            // キャビネットで削られがちな高域をここで補う
             self.presence_filter
-                .set_params(FilterType::HighShelf(p), 5000.0, 0.707);
+                .set_params(FilterType::HighShelf(p), 6500.0, 0.8);
 
+            // Resonance: 80Hz。スピーカーの「箱の揺れ」を強調。
+            // Qを鋭め(1.5)にして、タイトな重低音にする
+            self.resonance_filter
+                .set_params(FilterType::Peaking(r), 80.0, 1.5);
+
+            // キャッシュ更新
             self.last_eq_values = [l, m, h, p, r];
         }
     }
 
     pub fn process(&mut self, input: f32) -> f32 {
+        // パラメータ更新のチェック
         self.update_coefficients();
 
-        // 処理順序も重要：低い周波数から順に整えていく
+        // 処理順序も重要。
+        // 一般的に歪みの後は 低域のレゾナンス(Resonance)から始まり、
+        // 最後にヌケを調整する Presence を通すのが音楽的。
         let mut signal = input;
 
         signal = self.resonance_filter.process(signal);

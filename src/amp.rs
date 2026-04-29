@@ -1,5 +1,5 @@
-use nih_plug::prelude::*;
 use std::sync::Arc;
+use truce::prelude::*;
 
 pub mod cab;
 pub mod eq;
@@ -9,17 +9,17 @@ pub use cab::CabProcessor;
 pub use eq::EqProcessor;
 pub use gain::GainProcessor;
 
-use crate::params::XrossBassAmpParams;
-pub struct XrossBassAmp {
-    params: Arc<XrossBassAmpParams>,
+use crate::params::XrossGuitarAmpParams;
+
+pub struct XrossGuitarAmp {
+    params: Arc<XrossGuitarAmpParams>,
     gain_proc: GainProcessor,
     eq_proc: EqProcessor,
     cab_proc: CabProcessor,
 }
 
-impl Default for XrossBassAmp {
-    fn default() -> Self {
-        let params = Arc::new(XrossBassAmpParams::default());
+impl XrossGuitarAmp {
+    pub fn new(params: Arc<XrossGuitarAmpParams>) -> Self {
         Self {
             gain_proc: GainProcessor::new(params.clone()),
             eq_proc: EqProcessor::new(params.clone()),
@@ -27,64 +27,53 @@ impl Default for XrossBassAmp {
             params,
         }
     }
-}
 
-impl XrossBassAmp {
-    pub fn initialize(
-        &mut self,
-        _audio_io_layout: &AudioIOLayout,
-        buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
-    ) -> bool {
-        let sample_rate = buffer_config.sample_rate;
+    pub fn initialize_truce(&mut self, sr: f64, _bs: usize) {
+        let sample_rate = sr as f32;
         self.gain_proc.initialize(sample_rate);
         self.eq_proc.initialize(sample_rate);
         self.cab_proc.initialize(sample_rate);
-        true
     }
-    pub fn reset(&mut self) {
-        self.gain_proc.reset();
-        self.eq_proc.reset();
-        self.cab_proc.reset();
-    }
-    pub fn process(
-        &mut self,
-        buffer: &mut Buffer,
-        _aux: &mut AuxiliaryBuffers,
-        _context: &mut impl ProcessContext<Self>,
-    ) -> ProcessStatus {
-        // チャンネル数の確認（安全のため）
+
+    pub fn process_truce(&mut self, buffer: &mut AudioBuffer) -> ProcessStatus {
         let num_channels = buffer.channels();
+        let num_samples = buffer.num_samples();
 
-        for mut channel_samples in buffer.iter_samples() {
-            // 1. 入力信号の取得 (モノラル入力なのでインデックス0を固定参照)
-            let input = *channel_samples.get_mut(0).map_or(&0.0, |s| s);
+        for i in 0..num_samples {
+            // モノラル入力 (ch 0) を想定
+            let input = {
+                let (ins, _) = buffer.io(0);
+                ins[i]
+            };
 
-            // 2. モノラル処理チェーン
-            // Gain, EQ は内部で self.params を参照して処理
+            // 1. Gain & EQ (Mono)
             let mut mono_signal = self.gain_proc.process(input);
             mono_signal = self.eq_proc.process(mono_signal);
 
-            // 3. ステレオ分岐処理
-            // CabProcessor がステレオ出力を返すように設計されている場合
+            // 2. Cab (Mono to Stereo)
             let (left_out, right_out) = self.cab_proc.process(mono_signal);
 
-            // 4. 出力バッファへの書き込み
-            // Lチャンネル (0)
-            if let Some(l) = channel_samples.get_mut(0) {
-                *l = left_out;
-            }
-            // Rチャンネル (1) - ここでステレオ化が完了
-            if num_channels >= 2
-                && let Some(r) = channel_samples.get_mut(1)
+            // 3. Write outputs
+            // L channel
             {
-                *r = right_out;
+                let (_, outs) = buffer.io(0);
+                outs[i] = left_out;
+            }
+            // R channel
+            if num_channels >= 2 {
+                let (_, outs) = buffer.io(1);
+                outs[i] = right_out;
             }
         }
 
         ProcessStatus::Normal
     }
-    pub fn params(&self) -> Arc<XrossBassAmpParams> {
+
+    pub fn params(&self) -> Arc<XrossGuitarAmpParams> {
         self.params.clone()
+    }
+
+    pub fn ui(&self) -> Box<dyn Editor> {
+        crate::editor::create_editor(self.params())
     }
 }

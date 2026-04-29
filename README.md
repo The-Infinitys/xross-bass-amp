@@ -1,39 +1,41 @@
-# Xross Bass Amp
+# Xross Guitar Amp
 
 ![Thumbnail](thumbnail.png)
 
-Xross Bass Amp is a modern, high-gain bass amplifier plugin built with Rust and the [nih-plug](https://github.com/robbert-vdh/nih-plug) framework. Designed for the modern bassist, it focuses on maintaining low-end clarity while delivering aggressive, harmonically rich distortion through a sophisticated parallel processing engine.
+Xross Guitar Amp is a modern, high-gain guitar amplifier plugin built with Rust and the [truce-audio](https://github.com/truce-audio/truce) framework. It features a unique distortion engine, physical cabinet modeling with dual-microphone positioning, and a vibrant, interactive GUI.
 
 ## Features
 
-### 🎸 Parallel Gain Section
-* **Crossover Drive:** Splits the signal at 250Hz. The low-end remains clean and punchy, while only the high-end is sent to the drive section to ensure your bass never loses its "core."
-* **Grind & Tight:** Features a dedicated "Grind" control for pre-distortion mid-high emphasis and a "Tight" high-pass filter to eliminate low-end flabbiness, perfect for down-tuned or multi-string basses.
-* **Asymmetric Saturation:** A multi-stage saturation engine using `atan` and `tanh` functions to emulate organic tube warmth combined with modern solid-state grit.
+### 🎸 Advanced Gain Stage
+*   **4x Oversampling:** High-fidelity distortion processing with anti-aliasing filters.
+*   **Asymmetric Clipping:** Warm, tube-like saturation combined with aggressive hard-clipping "warp" stages.
+*   **Dynamic Response:** Features "Bite" (Slew-rate limiting) and "Punch" (Low-frequency resonance) that react to your playing dynamics.
+*   **Metal Scoop:** A dedicated filter to achieve that classic mid-scooped metal tone.
 
-### 🎛️ Dynamic Control & FX
-* **Built-in Compressor:** Optimized for bass frequencies to even out dynamics and increase sustain before the signal hits the drive stage.
-* **Smart Noise Gate:** A responsive gate designed to kill hum and hiss during high-gain playing without cutting off natural note decays.
-* **Master Blend:** Precisely mix the clean low-end with the processed dirty path for the ultimate "clank" or subtle grit.
+### 🎛️ 5-Band Equalizer
+*   **Classic Controls:** Low, Mid, and High shelving/peaking filters.
+*   **Presence:** Adds high-end clarity and "air" to the signal.
+*   **Resonance:** Controls the low-end thunk and cabinet weight.
 
 ### 🔊 Physical Cabinet Modeling
-* **Speaker Customization:** Select speaker sizes (10" to 15") and classic bass configurations like 1x15, 4x10, or the legendary 8x10 "fridge."
-* **Dual Microphone Setup:** Two independent virtual microphones (Mic A & Mic B) with adjustable **Axis** and **Distance** for realistic air movement.
-* **Post-Drive Filtering:** Integrated 8kHz low-pass filter to smooth out "fizz" and provide a polished, record-ready high-end.
+*   **Speaker Customization:** Select speaker sizes from 8" to 15" and configurations from 1 to 8 speakers (1x12, 2x12, 4x12, etc.).
+*   **Dual Microphone Setup:** Two independent microphones (Mic A and Mic B) with adjustable **Axis** (center to edge) and **Distance** (close to far).
+*   **Room Ambience:** Integrated room simulation with Size and Mix controls for early reflections and depth.
 
-### ✨ Technical Excellence
-* **Stable Filters:** All filtering is handled by Topology Preserving Transform (TPT) structures for analog-like behavior and stability at high frequencies.
-* **Zero-Latency Design:** Optimized for real-time performance and tracking.
+### ✨ Effects & Utility
+*   **Sag:** Simulates power supply voltage sag for a compressed, spongy feel.
+*   **Tight:** Adjustable Pre-High Pass Filter (20Hz - 500Hz) to clean up low-end flabbiness before distortion.
+*   **Reverb:** A built-in diffuse reverb for an instant "in-the-room" sound.
 
 ### 🎨 Modern User Interface
-* **Vibrant GUI:** Built with `egui`, featuring smooth animations and a responsive, high-frame-rate layout.
-* **Interactive Visualizer:** A 2D top-down view for intuitive microphone positioning.
-* **High Precision:** All parameters support double-click to reset and direct text input for surgical adjustments.
+*   **Vibrant GUI:** Built with `egui`, featuring smooth animations and a dynamic background.
+*   **Interactive Visualizer:** Real-time 2D visualization of the cabinet layout and microphone positions.
+*   **High Precision:** All knobs support double-click to reset and direct text input for precise adjustments.
 
 ## Plugin Formats
-* **CLAP**
-* **VST3**
-* **Standalone**
+*   **CLAP**
+*   **VST3**
+*   **Standalone**
 
 ## Building from Source
 
@@ -41,17 +43,17 @@ Ensure you have [Rust](https://rustup.rs/) and [Cargo](https://doc.rust-lang.org
 
 ```bash
 # Clone the repository
-git clone https://github.com/The-Infinitys/xross-bass-amp.git
-cd xross-bass-amp
+git clone https://github.com/The-Infinitys/xross-guitar-amp.git
+cd xross-guitar-amp
 
-# Build the plugin (Standalone / VST3 / CLAP)
-cargo bundle --release
+# Install the plugin (Standalone / VST3 / CLAP)
+cargo truce install
 ```
 
-The resulting binaries will be located in `target/bundled/`.
+The resulting binaries will be located in `target/release/`.
 
 ## Credits
 Developed by **The Infinitys**.
 
-* Email: [the.infinity.s.infinity@gmail.com](mailto:the.infinity.s.infinity@gmail.com)
-* GitHub: [https://github.com/The-Infinitys/xross-bass-amp](https://github.com/The-Infinitys/xross-bass-amp)
+*   Email: [the.infinity.s.infinity@gmail.com](mailto:the.infinity.s.infinity@gmail.com)
+*   GitHub: [https://github.com/The-Infinitys/xross-guitar-amp](https://github.com/The-Infinitys/xross-guitar-amp)

@@ -1,23 +1,20 @@
-use nih_plug_egui::egui::{self, Color32, Vec2};
+use egui::{self, Ui, Vec2};
 
 pub struct Logo;
 
 impl Logo {
-    pub fn draw(ui: &mut egui::Ui, height: f32) {
-        // 1. 初回のみSVGローダーをインストール
+    pub fn draw(ui: &mut Ui, height: f32) {
+        // 1. 初回のみSVGローダーをインストール（必須）
         egui_extras::install_image_loaders(ui.ctx());
 
+        // 2. SVGをロード
         let image = egui::include_image!("../../assets/xross_logo.svg");
 
-        let (rect, _) =
-            ui.allocate_exact_size(Vec2::new(height * 3.0, height), egui::Sense::hover());
-
         // 3. 描画
-        ui.put(
-            rect,
+        ui.add(
             egui::Image::new(image)
                 .max_height(height)
-                .tint(Color32::from_gray(40)), // ロゴ自体を少し暗めのグレーにして読みやすくする
+                .fit_to_exact_size(Vec2::new(height * 3.0, height)),
         );
     }
 }
