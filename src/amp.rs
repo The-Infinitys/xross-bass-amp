@@ -36,7 +36,7 @@ impl XrossBassAmp {
     }
 
     pub fn process_truce(&mut self, buffer: &mut AudioBuffer) -> ProcessStatus {
-        let num_channels = buffer.channels();
+        let num_channels = buffer.num_output_channels();
         let num_samples = buffer.num_samples();
 
         for i in 0..num_samples {
