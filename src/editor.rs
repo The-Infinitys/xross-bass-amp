@@ -23,7 +23,7 @@ fn get_vibrant_rainbow_color(index: usize, total: usize) -> Color32 {
 }
 pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
     // ターゲットサイズを定義（このサイズをベースに描画）
-    let width = 920;
+    let width = 940;
     let height = 640;
     let bg = Background::new();
 

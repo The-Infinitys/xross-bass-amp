@@ -59,7 +59,7 @@ impl AutoNoiseGate {
         let nf_min = 0.00003; // ノイズフロア学習の下限 (-90dB)
 
         // 簡易HPF係数 (約1.5kHzで高域抽出)
-        let hp_coef = (2.0 * PI * 1500.0 / self.sample_rate).exp() * -1.0 + 1.0;
+        let hp_coef = -(2.0 * PI * 1500.0 / self.sample_rate).exp() + 1.0;
 
         for (i, &sample) in buffer.iter().enumerate() {
             let abs_in = sample.abs();
