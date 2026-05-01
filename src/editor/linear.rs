@@ -21,24 +21,17 @@ impl<'a> Widget for LinearSlider<'a> {
         let text_edit_id = id.with("text_edit");
         let edit_string_id = id.with("edit_string");
 
-        let mut is_editing_text =
+        // 編集状態の取得
+        let mut is_editing =
             ui.memory(|mem| mem.data.get_temp::<bool>(text_edit_id).unwrap_or(false));
+        let text_rect = rect.scale_from_center(0.5);
 
-        let text_rect = rect.shrink(2.0);
+        // --- インタラクション ---
 
-        // ====================== インタラクション処理 ======================
-        if response.secondary_clicked() {
-            self.param.set_value(self.param.info.default_plain);
-            is_editing_text = false;
-            ui.memory_mut(|mem| {
-                mem.data.insert_temp(text_edit_id, false);
-                mem.data.remove::<String>(edit_string_id);
-            });
-        }
-
+        // 1. テキストエリアをクリックで編集モード
         let text_interaction = ui.interact(text_rect, id.with("text_area"), Sense::click());
-        if text_interaction.clicked() && !is_editing_text {
-            is_editing_text = true;
+        if text_interaction.clicked() && !is_editing {
+            is_editing = true;
             ui.memory_mut(|mem| {
                 mem.data.insert_temp(text_edit_id, true);
                 mem.data
@@ -46,110 +39,129 @@ impl<'a> Widget for LinearSlider<'a> {
             });
         }
 
-        if response.dragged() && !is_editing_text {
-            let val = self.param.value_normalized();
+        // 2. ダブルクリックでリセット（テキストエリア外）
+        if response.double_clicked()
+            && !text_rect.contains(ui.input(|i| i.pointer.hover_pos().unwrap_or_default()))
+        {
+            self.param.set_value(self.param.info.default_plain);
+            is_editing = false;
+            ui.memory_mut(|mem| {
+                mem.data.insert_temp(text_edit_id, false);
+                mem.data.remove::<String>(edit_string_id);
+            });
+        }
+
+        // 3. ドラッグによる値の変更（正規化トレイトを使用）
+        if response.dragged() && !is_editing {
             let delta = (response.drag_delta().x / rect.width()) as f64;
             if delta != 0.0 {
-                let new_val = (val + delta).clamp(0.0, 1.0);
-                self.param.set_value_normalized(new_val);
+                let current_norm = self.param.value_normalized();
+                let new_norm = (current_norm + delta).clamp(0.0, 1.0);
+                self.param.set_value_normalized(new_norm);
             }
         }
 
-        // ====================== 描画 ======================
+        // --- 描画 ---
         if ui.is_rect_visible(rect) {
-            let visual_val = self.param.value_normalized() as f32;
-            // ライトモード用に彩度を少し維持
-            let bar_color = self.color.gamma_multiply(0.8);
-
             let painter = ui.painter();
+            let visual_val = self.param.value_normalized() as f32;
+            let bar_color = self.color.linear_multiply(0.6);
 
-            // 1. スライダー背景（溝の表現）
-            painter.rect_filled(rect, 2.0, Color32::from_gray(225));
+            // 背景
+            painter.rect_filled(rect, 2.0, Color32::from_rgb(5, 5, 5));
+
+            // 塗りつぶし (バー)
+            let x_pos = rect.left() + (visual_val * rect.width());
+            let fill_rect = Rect::from_min_max(rect.left_top(), egui::pos2(x_pos, rect.bottom()));
+            painter.rect_filled(fill_rect, 1.0, bar_color);
+
+            // 枠線
             painter.rect_stroke(
                 rect,
                 2.0,
-                Stroke::new(1.0, Color32::from_gray(190)),
-                egui::StrokeKind::Inside,
+                Stroke::new(1.0, Color32::from_gray(60)),
+                egui::StrokeKind::Middle,
             );
 
-            // 2. プログレスバー（塗りつぶし）
-            let fill_rect = {
-                let x_pos = rect.left() + (visual_val * rect.width());
-                Rect::from_min_max(rect.left_top(), egui::pos2(x_pos, rect.bottom()))
-            };
-            if visual_val > 0.0 {
-                painter.rect_filled(fill_rect, 2.0, bar_color);
-            }
-
-            // 3. ハンドル（垂直線）
-            let handle_x = (rect.left() + visual_val * rect.width())
-                .clamp(rect.left() + 1.0, rect.right() - 1.0);
-            let handle_rect = Rect::from_center_size(
-                egui::pos2(handle_x, rect.center().y),
-                vec2(3.0, rect.height() + 2.0), // 少し上下にはみ出させて視認性アップ
+            // ハンドル線
+            let handle_x = x_pos.clamp(rect.left() + 1.0, rect.right() - 1.0);
+            painter.line_segment(
+                [
+                    egui::pos2(handle_x, rect.top()),
+                    egui::pos2(handle_x, rect.bottom()),
+                ],
+                Stroke::new(2.0, Color32::WHITE),
             );
-            painter.rect_filled(handle_rect, 1.0, Color32::from_gray(80));
 
-            // 4. テキスト描画
-            if is_editing_text {
+            // テキスト表示・編集
+            if is_editing {
                 let mut value_text = ui.memory(|mem| {
                     mem.data
                         .get_temp::<String>(edit_string_id)
                         .unwrap_or_else(|| format!("{:.2}", self.param.value()))
                 });
 
-                let output = ui.put(
+                let res = ui.put(
                     text_rect,
                     egui::TextEdit::singleline(&mut value_text)
                         .font(FontId::proportional(11.0))
-                        .text_color(Color32::BLACK) // 入力中は黒
                         .horizontal_align(egui::Align::Center)
                         .frame(false),
                 );
 
-                if output.changed() {
+                if res.changed() {
                     ui.memory_mut(|mem| mem.data.insert_temp(edit_string_id, value_text.clone()));
                 }
 
-                if output.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                if res.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                     if let Ok(parsed) = value_text.parse::<f64>() {
                         self.param.set_value(parsed);
                     }
-                    is_editing_text = false;
                     ui.memory_mut(|mem| {
                         mem.data.insert_temp(text_edit_id, false);
                         mem.data.remove::<String>(edit_string_id);
                     });
                 } else {
-                    output.request_focus();
+                    res.request_focus();
                 }
             } else {
-                // 通常テキスト
-                let text = format!("{}: {:.1}", self.param.info.name, self.param.value());
-                let font_id = FontId::proportional(10.5); // 少しだけ小さくして余白を確保
+                let display_text = format!(
+                    "{}: {:.1} {}",
+                    self.param.info.name,
+                    self.param.value(),
+                    self.param.info.unit.as_str()
+                );
+                let font_id = FontId::proportional(11.0);
                 let text_pos = rect.center();
 
-                // 未充填部分のテキスト（濃いグレー）
+                // シャドウ
+                painter.text(
+                    text_pos + vec2(1.0, 1.0),
+                    Align2::CENTER_CENTER,
+                    &display_text,
+                    font_id.clone(),
+                    Color32::from_black_alpha(200),
+                );
+                // 通常文字 (背景部分)
                 painter.text(
                     text_pos,
                     Align2::CENTER_CENTER,
-                    &text,
+                    &display_text,
                     font_id.clone(),
-                    Color32::from_gray(60),
+                    Color32::from_gray(180),
                 );
-
-                // バーに重なっている部分のテキスト（白抜き）
+                // 反転文字 (バーに重なっている部分)
                 painter.with_clip_rect(fill_rect).text(
                     text_pos,
                     Align2::CENTER_CENTER,
-                    &text,
+                    &display_text,
                     font_id,
                     Color32::WHITE,
                 );
             }
         }
 
-        if response.dragged() || is_editing_text {
+        if response.dragged() || is_editing {
             ui.ctx().request_repaint();
         }
 

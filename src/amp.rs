@@ -16,6 +16,9 @@ pub struct XrossBassAmp {
     gain_proc: GainProcessor,
     eq_proc: EqProcessor,
     cab_proc: CabProcessor,
+
+    // 内部処理用のモノラル一時バッファ（ヒープ確保を避けるため再利用）
+    internal_buffer: Vec<f32>,
 }
 
 impl XrossBassAmp {
@@ -25,46 +28,40 @@ impl XrossBassAmp {
             eq_proc: EqProcessor::new(params.clone()),
             cab_proc: CabProcessor::new(params.clone()),
             params,
+            internal_buffer: Vec::with_capacity(512), // 一般的なバッファサイズで初期化
         }
     }
 
-    pub fn initialize_truce(&mut self, sr: f64, _bs: usize) {
+    pub fn initialize_truce(&mut self, sr: f64, max_block_size: usize) {
         let sample_rate = sr as f32;
         self.gain_proc.initialize(sample_rate);
         self.eq_proc.initialize(sample_rate);
         self.cab_proc.initialize(sample_rate);
+
+        // 最大ブロックサイズに合わせてバッファを確保
+        self.internal_buffer.resize(max_block_size, 0.0);
     }
 
     pub fn process_truce(&mut self, buffer: &mut AudioBuffer) -> ProcessStatus {
-        let num_channels = buffer.num_output_channels();
         let num_samples = buffer.num_samples();
+        let input_channels = buffer.num_input_channels();
+        let out_channels = buffer.num_output_channels();
 
-        for i in 0..num_samples {
-            // モノラル入力 (ch 0) を想定
-            let input = {
-                let (ins, _) = buffer.io(0);
-                ins[i]
-            };
-
-            // 1. Gain & EQ (Mono)
-            let mut mono_signal = self.gain_proc.process(input);
-            mono_signal = self.eq_proc.process(mono_signal);
-
-            // 2. Cab (Mono to Stereo)
-            let (left_out, right_out) = self.cab_proc.process(mono_signal);
-
-            // 3. Write outputs
-            // L channel
-            {
-                let (_, outs) = buffer.io(0);
-                outs[i] = left_out;
-            }
-            // R channel
-            if num_channels >= 2 {
-                let (_, outs) = buffer.io(1);
-                outs[i] = right_out;
+        if num_samples == 0 || input_channels == 0 || out_channels == 0 {
+            return ProcessStatus::Normal;
+        }
+        {
+            let (input, output) = buffer.io(0);
+            for i in 0..num_samples {
+                output[i] = input[i];
             }
         }
+        let output_l = buffer.output(0);
+        self.gain_proc.process(output_l);
+        self.eq_proc.process(output_l);
+
+        // // 3. キャビネット・ステレオ展開処理 (AudioBufferを直接渡す)
+        self.cab_proc.process_truce(buffer);
 
         ProcessStatus::Normal
     }
