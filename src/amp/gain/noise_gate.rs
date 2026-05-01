@@ -30,11 +30,13 @@ pub struct AutoNoiseGate {
 
 impl AutoNoiseGate {
     pub fn new(sample_rate: f32) -> Self {
-        let mut state = GateState::default();
-        state.gate_gain = 1.0;
-        state.noise_floor_full = 0.001;
-        state.noise_floor_high = 0.0005;
-        state.adaptive_sensitivity = 6.0;
+        let state = GateState {
+            gate_gain: 1.0,
+            noise_floor_full: 0.001,
+            noise_floor_high: 0.0005,
+            adaptive_sensitivity: 6.0,
+            ..Default::default()
+        };
 
         Self {
             sample_rate,

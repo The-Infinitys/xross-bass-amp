@@ -1,7 +1,7 @@
 use crate::params::XrossBassAmpParams;
 use std::sync::Arc;
 mod dark;
-use dark::DarkDistortion;
+use dark::{DarkDistortion, DarkParams};
 mod noise_gate;
 use noise_gate::AutoNoiseGate;
 
@@ -45,21 +45,19 @@ impl GainProcessor {
 
         // 4. メイン歪みプロセッサ (DarkDistortion)
         // params.rs の各値を DarkDistortion の引数にマッピング
-        let drive = self.params.gain.value();
-        let grit = self.params.grit.value();
-        let sag = self.params.low_comp.value();
-        let tight = self.params.tight.value();
-        let focus = self.params.focus.value();
-        let attack = self.params.attack.value();
+        let dark_params = DarkParams {
+            drive: self.params.gain.value(),
+            dist: self.params.grit.value(),
+            sag: self.params.low_comp.value(),
+            tight: self.params.tight.value(),
+            focus: self.params.focus.value(),
+            attack: self.params.attack.value(),
+            s_low: self.params.eq_low.value() / 18.0,
+            s_mid: self.params.eq_mid.value() / 18.0,
+            s_high: self.params.eq_high.value() / 18.0,
+        };
 
-        // Style/EQ系 (本来はEQ Processorで行うが、歪みの特性として渡す)
-        let s_low = self.params.eq_low.value() / 18.0;
-        let s_mid = self.params.eq_mid.value() / 18.0;
-        let s_high = self.params.eq_high.value() / 18.0;
-
-        self.metal.process_slice(
-            input, drive, grit, sag, tight, focus, attack, s_low, s_mid, s_high,
-        );
+        self.metal.process_slice(input, &dark_params);
 
         // 5. ポスト・ノイズゲート
         self.noise_gate.post_process(input);

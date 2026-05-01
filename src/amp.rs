@@ -57,18 +57,14 @@ impl XrossBassAmp {
         }
         {
             let input = buffer.input(0);
-            for i in 0..num_samples {
-                self.internal_buffer[i] = input[i];
-            }
+            self.internal_buffer[..num_samples].copy_from_slice(&input[..num_samples]);
         }
 
         // --- 2. Main Signal Path (Amp Head) ---
         // Copy input to output channel 0 for processing
         {
             let (input, output) = buffer.io(0);
-            for i in 0..num_samples {
-                output[i] = input[i];
-            }
+            output[..num_samples].copy_from_slice(&input[..num_samples]);
         }
         let output_l = buffer.output(0);
         self.gain_proc.process(output_l);
@@ -78,9 +74,13 @@ impl XrossBassAmp {
         let di_mix = self.params.di_mix.value();
         if di_mix > 0.0 {
             let output_l = buffer.output(0);
-            for i in 0..num_samples {
+            for (sample, &di_sample) in output_l
+                .iter_mut()
+                .zip(&self.internal_buffer)
+                .take(num_samples)
+            {
                 // DI信号（クリーン）を歪み/EQ後の信号にミックス
-                output_l[i] = output_l[i] * (1.0 - di_mix) + self.internal_buffer[i] * di_mix;
+                *sample = *sample * (1.0 - di_mix) + di_sample * di_mix;
             }
         }
 
@@ -93,8 +93,10 @@ impl XrossBassAmp {
         if final_mix < 1.0 {
             for ch in 0..out_channels {
                 let out = buffer.output(ch);
-                for i in 0..num_samples {
-                    out[i] = out[i] * final_mix + self.internal_buffer[i] * (1.0 - final_mix);
+                for (sample, &di_sample) in
+                    out.iter_mut().zip(&self.internal_buffer).take(num_samples)
+                {
+                    *sample = *sample * final_mix + di_sample * (1.0 - final_mix);
                 }
             }
         }

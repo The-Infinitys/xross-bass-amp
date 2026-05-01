@@ -29,6 +29,18 @@ pub struct DarkDistortion {
     sample_rate: f32,
 }
 
+pub struct DarkParams {
+    pub drive: f32,
+    pub dist: f32,
+    pub sag: f32,
+    pub tight: f32,
+    pub focus: f32,
+    pub attack: f32,
+    pub s_low: f32,
+    pub s_mid: f32,
+    pub s_high: f32,
+}
+
 impl DarkDistortion {
     pub fn new(sample_rate: f32) -> Self {
         Self {
@@ -50,51 +62,39 @@ impl DarkDistortion {
     }
 
     #[inline(always)]
-    fn drive_core(
-        &mut self,
-        input: f32,
-        drive: f32,
-        dist: f32,
-        sag: f32,
-        tight: f32,
-        focus: f32,
-        attack: f32,
-        s_low: f32,
-        s_mid: f32,
-        s_high: f32,
-    ) -> f32 {
-        if drive <= 0.01 {
+    fn drive_core(&mut self, input: f32, p: &DarkParams) -> f32 {
+        if p.drive <= 0.01 {
             return input;
         }
 
         // 1. PRE-FILTERING (Tightness & Character)
         // 低域の飽和を防ぎ、解像度を保つ
-        let tight_norm = (tight * 2.0 * PI / self.sample_rate).clamp(0.005, 0.8);
+        let tight_norm = (p.tight * 2.0 * PI / self.sample_rate).clamp(0.005, 0.8);
         self.pre_hp += tight_norm * (input - self.pre_hp);
         let mut x = input - self.pre_hp;
 
         // Focus (Mid Clarity): Boost around 600Hz before distortion
-        let focus_boost = focus * 12.0;
+        let focus_boost = p.focus * 12.0;
         let focus_gain = 10.0f32.powf(focus_boost / 20.0);
         // シンプルな簡易フィルタ
         x *= 1.0 + (focus_gain - 1.0) * 0.5;
 
         // Attack (Picking Definition): Boost around 2.8kHz before distortion
-        let attack_boost = attack * 15.0;
+        let attack_boost = p.attack * 15.0;
         let attack_gain = 10.0f32.powf(attack_boost / 20.0);
         x *= 1.0 + (attack_gain - 1.0) * 0.3;
 
         // 2. GAIN STAGING & SAG (Low Comp)
-        let sag_val = 1.0 - (self.envelope * sag * 0.5);
-        let drive_gain = 1.0 + drive.powf(2.0) * 80.0;
+        let sag_val = 1.0 - (self.envelope * p.sag * 0.5);
+        let drive_gain = 1.0 + p.drive.powf(2.0) * 80.0;
         x *= drive_gain * sag_val;
 
         // 3. ASYMMETRIC SATURATION
-        let fb_amount = 0.05 + dist * 0.25;
+        let fb_amount = 0.05 + p.dist * 0.25;
         let mut sig = x + (self.feedback_state * fb_amount);
 
-        let asymmetry = 0.1 * dist; // 歪ませるほど非対称にし、倍音を増やす
-        let drive_factor = 1.5 + dist * 2.5;
+        let asymmetry = 0.1 * p.dist; // 歪ませるほど非対称にし、倍音を増やす
+        let drive_factor = 1.5 + p.dist * 2.5;
 
         if sig > 0.0 {
             sig = (sig * drive_factor).tanh();
@@ -106,41 +106,29 @@ impl DarkDistortion {
 
         // 4. CHARACTER EQ (Scoop & Resonance)
         // Mid Scoop: メタル的な質感を付与
-        let mid_scoop = (-s_mid).max(0.0) * 0.5;
+        let mid_scoop = (-p.s_mid).max(0.0) * 0.5;
         sig -= (sig - sig.powi(3)) * mid_scoop;
 
         // Low Resonance: 低域の重みを強調
-        let low_boost = s_low.max(0.0) * 0.4;
+        let low_boost = p.s_low.max(0.0) * 0.4;
         self.low_resonance += 0.1 * (sig - self.low_resonance);
         sig += self.low_resonance * low_boost;
 
         // 5. POST-PROCESSING (High-cut & Slew)
         let post_cutoff =
-            (4000.0 + s_high * 8000.0 + (1.0 - drive) * 4000.0) * 2.0 * PI / self.sample_rate;
+            (4000.0 + p.s_high * 8000.0 + (1.0 - p.drive) * 4000.0) * 2.0 * PI / self.sample_rate;
         self.post_tight += post_cutoff.clamp(0.01, 0.9) * (sig - self.post_tight);
         sig = self.post_tight;
 
         // Slew Rate: 物理的な回路の「鈍さ」をシミュレートして高域のトゲを取る
-        let max_step = 0.05 + (1.0 - drive) * 0.5;
+        let max_step = 0.05 + (1.0 - p.drive) * 0.5;
         let diff = sig - self.slew_state;
         self.slew_state += diff.clamp(-max_step, max_step);
 
         self.slew_state
     }
 
-    pub fn process_sample(
-        &mut self,
-        input: f32,
-        drive: f32,
-        dist: f32,
-        sag: f32,
-        tight: f32,
-        focus: f32,
-        attack: f32,
-        s_low: f32,
-        s_mid: f32,
-        s_high: f32,
-    ) -> f32 {
+    pub fn process_sample(&mut self, input: f32, p: &DarkParams) -> f32 {
         // オーバーサンプリング (2倍)
         let mut output_sum = 0.0;
         self.envelope += (input.abs() - self.envelope) * 0.05;
@@ -148,9 +136,7 @@ impl DarkDistortion {
         for i in 0..2 {
             let fraction = i as f32 * 0.5;
             let sub_sample = self.prev_input + (input - self.prev_input) * fraction;
-            output_sum += self.drive_core(
-                sub_sample, drive, dist, sag, tight, focus, attack, s_low, s_mid, s_high,
-            );
+            output_sum += self.drive_core(sub_sample, p);
         }
         self.prev_input = input;
 
@@ -167,23 +153,9 @@ impl DarkDistortion {
         dc_fix * 0.5 // 最終音量調整
     }
 
-    pub fn process_slice(
-        &mut self,
-        slice: &mut [f32],
-        drive: f32,
-        dist: f32,
-        sag: f32,
-        tight: f32,
-        focus: f32,
-        attack: f32,
-        s_low: f32,
-        s_mid: f32,
-        s_high: f32,
-    ) {
+    pub fn process_slice(&mut self, slice: &mut [f32], p: &DarkParams) {
         for sample in slice.iter_mut() {
-            *sample = self.process_sample(
-                *sample, drive, dist, sag, tight, focus, attack, s_low, s_mid, s_high,
-            );
+            *sample = self.process_sample(*sample, p);
         }
     }
 
