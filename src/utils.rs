@@ -1,3 +1,4 @@
+use egui::Color32;
 use truce::params::FloatParam;
 
 pub trait FloatParamNormalizedExt {
@@ -16,5 +17,13 @@ impl FloatParamNormalizedExt for FloatParam {
         let range = &self.info.range;
         let val = range.denormalize(norm);
         self.set_value(val);
+    }
+}
+pub trait WithAlpha {
+    fn with_alpha(self, alpha: u8) -> Self;
+}
+impl WithAlpha for Color32 {
+    fn with_alpha(self, alpha: u8) -> Self {
+        Self::from_rgba_premultiplied(self.r(), self.g(), self.b(), alpha)
     }
 }

@@ -21,14 +21,11 @@ impl<'a> Widget for LinearSlider<'a> {
         let text_edit_id = id.with("text_edit");
         let edit_string_id = id.with("edit_string");
 
-        // 編集状態の取得
         let mut is_editing =
             ui.memory(|mem| mem.data.get_temp::<bool>(text_edit_id).unwrap_or(false));
         let text_rect = rect.scale_from_center(0.5);
 
-        // --- インタラクション ---
-
-        // 1. テキストエリアをクリックで編集モード
+        // --- インタラクション (変更なし) ---
         let text_interaction = ui.interact(text_rect, id.with("text_area"), Sense::click());
         if text_interaction.clicked() && !is_editing {
             is_editing = true;
@@ -39,7 +36,6 @@ impl<'a> Widget for LinearSlider<'a> {
             });
         }
 
-        // 2. ダブルクリックでリセット（テキストエリア外）
         if response.double_clicked()
             && !text_rect.contains(ui.input(|i| i.pointer.hover_pos().unwrap_or_default()))
         {
@@ -51,7 +47,6 @@ impl<'a> Widget for LinearSlider<'a> {
             });
         }
 
-        // 3. ドラッグによる値の変更（正規化トレイトを使用）
         if response.dragged() && !is_editing {
             let delta = (response.drag_delta().x / rect.width()) as f64;
             if delta != 0.0 {
@@ -61,29 +56,31 @@ impl<'a> Widget for LinearSlider<'a> {
             }
         }
 
-        // --- 描画 ---
+        // --- 描画 (ライトモード調整) ---
         if ui.is_rect_visible(rect) {
             let painter = ui.painter();
             let visual_val = self.param.value_normalized() as f32;
-            let bar_color = self.color.linear_multiply(0.6);
 
-            // 背景
-            painter.rect_filled(rect, 2.0, Color32::from_rgb(5, 5, 5));
+            // ライトモード用にバーの色を少し明るめに (multiplyを調整)
+            let bar_color = self.color.linear_multiply(0.8);
+
+            // 背景 (ライトモード: 非常に薄いグレー)
+            painter.rect_filled(rect, 2.0, Color32::from_gray(245));
 
             // 塗りつぶし (バー)
             let x_pos = rect.left() + (visual_val * rect.width());
             let fill_rect = Rect::from_min_max(rect.left_top(), egui::pos2(x_pos, rect.bottom()));
-            painter.rect_filled(fill_rect, 1.0, bar_color);
+            painter.rect_filled(fill_rect, 2.0, bar_color);
 
-            // 枠線
+            // 枠線 (ライトモード: 中程度のグレー)
             painter.rect_stroke(
                 rect,
                 2.0,
-                Stroke::new(1.0, Color32::from_gray(60)),
+                Stroke::new(1.0, Color32::from_gray(180)),
                 egui::StrokeKind::Middle,
             );
 
-            // ハンドル線
+            // ハンドル線 (ライトモード: 白だと埋もれるので、わずかに影や色を持たせる)
             let handle_x = x_pos.clamp(rect.left() + 1.0, rect.right() - 1.0);
             painter.line_segment(
                 [
@@ -105,6 +102,7 @@ impl<'a> Widget for LinearSlider<'a> {
                     text_rect,
                     egui::TextEdit::singleline(&mut value_text)
                         .font(FontId::proportional(11.0))
+                        .text_color(Color32::BLACK) // 入力時は黒
                         .horizontal_align(egui::Align::Center)
                         .frame(false),
                 );
@@ -134,23 +132,17 @@ impl<'a> Widget for LinearSlider<'a> {
                 let font_id = FontId::proportional(11.0);
                 let text_pos = rect.center();
 
-                // シャドウ
-                painter.text(
-                    text_pos + vec2(1.0, 1.0),
-                    Align2::CENTER_CENTER,
-                    &display_text,
-                    font_id.clone(),
-                    Color32::from_black_alpha(200),
-                );
-                // 通常文字 (背景部分)
+                // 通常文字 (背景部分: 濃いグレー)
                 painter.text(
                     text_pos,
                     Align2::CENTER_CENTER,
                     &display_text,
                     font_id.clone(),
-                    Color32::from_gray(180),
+                    Color32::from_gray(60),
                 );
-                // 反転文字 (バーに重なっている部分)
+
+                // 反転文字 (バーに重なっている部分: 白)
+                // バーの色が明るい場合は、ここを黒にするなどの調整も検討してください
                 painter.with_clip_rect(fill_rect).text(
                     text_pos,
                     Align2::CENTER_CENTER,

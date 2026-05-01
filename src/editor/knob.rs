@@ -14,15 +14,14 @@ impl<'a> Knob<'a> {
             base_color: color,
         }
     }
-
-    /// StackedKnob / LinearSlider と共通の動的カラー計算
     fn get_dynamic_color(&self, visual_val: f32) -> Color32 {
-        let r = (self.base_color.r() as f32 * (0.6 + visual_val * 0.4)) as u8;
-        let g = (self.base_color.g() as f32 * (0.6 + visual_val * 0.4)) as u8;
-        let b = (self.base_color.b() as f32 * (0.6 + visual_val * 0.4)) as u8;
+        // ライトモード用にベースカラーを少し鮮やかに調整（白背景で沈まないように）
+        let r = (self.base_color.r() as f32 * (0.8 + visual_val * 0.2)) as u8;
+        let g = (self.base_color.g() as f32 * (0.8 + visual_val * 0.2)) as u8;
+        let b = (self.base_color.b() as f32 * (0.8 + visual_val * 0.2)) as u8;
 
         if visual_val > 0.85 {
-            let boost = ((visual_val - 0.85) * 6.6 * 40.0) as u8;
+            let boost = ((visual_val - 0.85) * 6.6 * 30.0) as u8;
             Color32::from_rgb(
                 r.saturating_add(boost),
                 g.saturating_add(boost),
@@ -39,17 +38,13 @@ impl<'a> Widget for Knob<'a> {
         // --- 1. レイアウト定義 ---
         let desired_size = vec2(62.0, 120.0);
         let (rect, response) = ui.allocate_at_least(desired_size, Sense::click_and_drag());
-
         let id = response.id;
         let text_edit_id = id.with("edit_mode");
         let edit_string_id = id.with("edit_str");
 
-        // インタラクション: ダブルクリックでデフォルト値
         if response.double_clicked() {
             self.param.set_value(self.param.info.default_plain);
         }
-
-        // ドラッグ操作
         if response.dragged() {
             let delta = -response.drag_delta().y * 0.006;
             let new_norm = (self.param.value_normalized() + delta as f64).clamp(0.0, 1.0);
@@ -62,29 +57,27 @@ impl<'a> Widget for Knob<'a> {
         if ui.is_rect_visible(rect) {
             let painter = ui.painter();
             let active_color = self.get_dynamic_color(visual_val);
-
-            // 中央配置計算
             let center = rect.center();
             let radius = rect.width() * 0.38;
             let start_angle = PI * 0.8;
             let end_angle = PI * 2.2;
             let current_angle = start_angle + (visual_val * (end_angle - start_angle));
 
-            // A. タイトル
+            // A. タイトル (ライトモード: 濃いめのグレー)
             painter.text(
                 rect.center() + vec2(0.0, -44.0),
                 Align2::CENTER_CENTER,
                 self.param.info.name,
                 FontId::proportional(10.0),
-                Color32::from_gray(160),
+                Color32::from_gray(80),
             );
 
             // B. ノブ本体
-            // 背景溝
+            // 背景溝 (ライトモード: 薄いグレー)
             painter.circle_stroke(
                 center,
                 radius + 3.0,
-                Stroke::new(1.5, Color32::from_gray(35)),
+                Stroke::new(1.5, Color32::from_gray(210)),
             );
 
             // 円弧インジケーター
@@ -101,11 +94,13 @@ impl<'a> Widget for Knob<'a> {
                 painter.add(Shape::line(arc_points, Stroke::new(2.5, active_color)));
             }
 
-            // ノブ本体キャップ
-            painter.circle_filled(center, radius, Color32::from_gray(20));
+            // ノブ本体キャップ (ライトモード: 明るいシルバー/グレー)
+            painter.circle_filled(center, radius, Color32::from_gray(235));
+            // キャップの縁取り（少し立体感を出すため）
+            painter.circle_stroke(center, radius, Stroke::new(1.0, Color32::from_gray(200)));
 
-            // 指針 (針) - StackedKnobと同じスタイル
-            let tip = center + vec2(current_angle.cos(), current_angle.sin()) * (radius - 1.0);
+            // 指針 (針)
+            let tip = center + vec2(current_angle.cos(), current_angle.sin()) * (radius - 2.0);
             let base = center + vec2(current_angle.cos(), current_angle.sin()) * 2.0;
             painter.line_segment([base, tip], Stroke::new(2.5, active_color));
 
@@ -126,8 +121,9 @@ impl<'a> Widget for Knob<'a> {
                     value_rect.shrink2(vec2(4.0, 0.0)),
                     egui::TextEdit::singleline(&mut value_text)
                         .font(FontId::monospace(10.0))
+                        .text_color(Color32::BLACK) // 入力文字は黒
                         .horizontal_align(egui::Align::Center)
-                        .frame(false),
+                        .frame(true), // ライトモードは見やすさのため枠あり推奨
                 );
 
                 if res.changed() {
@@ -144,23 +140,30 @@ impl<'a> Widget for Knob<'a> {
             } else {
                 let val_res = ui.interact(value_rect, id.with("val_hit"), Sense::click());
 
-                // 数値表示の背景
+                // 数値表示の背景 (ライトモード: 非常に薄いグレー)
                 painter.rect_filled(
                     value_rect.shrink2(vec2(4.0, 1.0)),
                     2.0,
-                    Color32::from_black_alpha(80),
+                    Color32::from_gray(245),
+                );
+                // 枠線
+                painter.rect_stroke(
+                    value_rect.shrink2(vec2(4.0, 1.0)),
+                    2.0,
+                    Stroke::new(1.0, Color32::from_gray(220)),
+                    egui::StrokeKind::Middle,
                 );
 
-                // 値 + 単位
+                // 値 + 単位 (ライトモード: 濃いグレー)
                 let display_text = format!("{:.1}{}", self.param.value(), unit);
                 painter.text(
-                    value_rect.center(),
-                    Align2::CENTER_CENTER,
-                    display_text,
-                    FontId::monospace(10.0),
-                    Color32::from_gray(220)
-                        .lerp_to_gamma(self.base_color, self.param.value_normalized() as f32),
-                );
+                            value_rect.center(),
+                            Align2::CENTER_CENTER,
+                            display_text,
+                            FontId::monospace(10.0),
+                            Color32::from_gray(40) // テキストをはっきり見せる
+                                .lerp_to_gamma(self.base_color, self.param.value_normalized() as f32 * 0.5),
+                        );
 
                 if val_res.clicked() {
                     ui.memory_mut(|mem| {

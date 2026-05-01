@@ -1,4 +1,4 @@
-use egui::{self, Color32, Frame, NumExt, UiBuilder, Vec2, ecolor::Hsva};
+use egui::{self, Color32, Frame, NumExt, RichText, UiBuilder, Vec2, ecolor::Hsva};
 use std::sync::Arc;
 use truce::core::Editor;
 use truce_egui::EguiEditor;
@@ -160,27 +160,33 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                                             ));
                                             ui.add(LinearSlider::new(
                                                 &params.room_mix,
-                                                Color32::WHITE,
+                                                Color32::BLACK,
                                             ));
                                         });
 
                                         ui.vertical(|ui| {
-                                            ui.label(
-                                                egui::RichText::new("Speakers").strong().size(10.0),
-                                            );
+                                            ui.label(RichText::new("Speakers").strong().size(10.0));
                                             ui.add_space(2.0);
                                             ui.horizontal(|ui| {
                                                 ui.spacing_mut().item_spacing.x = 2.0;
-                                                for &count in &[1, 2, 4, 6, 8] {
+                                                for &count in &[1, 2, 4, 8, 16] {
                                                     let is_selected =
                                                         params.speaker_count.value() == count;
-                                                    let btn = egui::Button::new(count.to_string())
-                                                        .fill(if is_selected {
-                                                            Color32::from_rgb(0, 80, 0)
-                                                        } else {
-                                                            Color32::from_gray(40)
-                                                        })
-                                                        .min_size(Vec2::new(24.0, 18.0));
+                                                    let btn = egui::Button::new(
+                                                        RichText::new(count.to_string()).color(
+                                                            if is_selected {
+                                                                Color32::WHITE
+                                                            } else {
+                                                                Color32::BLACK
+                                                            },
+                                                        ),
+                                                    )
+                                                    .fill(if is_selected {
+                                                        Color32::from_rgb(0, 0, 80)
+                                                    } else {
+                                                        Color32::from_gray(240)
+                                                    })
+                                                    .min_size(Vec2::new(24.0, 18.0));
                                                     if ui.add(btn).clicked() {
                                                         params.speaker_count.set_value(count);
                                                     }
@@ -232,8 +238,8 @@ fn draw_section_with_height(
     mut add_contents: impl FnMut(&mut egui::Ui),
 ) {
     Frame::NONE
-        .fill(Color32::from_black_alpha(160)) // 背景を少し濃くして視認性確保
-        .stroke(egui::Stroke::new(1.0, Color32::from_gray(60)))
+        .fill(Color32::from_white_alpha(180)) // 背景を少し濃くして視認性確保
+        .stroke(egui::Stroke::new(1.0, Color32::from_gray(200)))
         .corner_radius(6.0) // 角丸も少し控えめに
         .inner_margin(8.0) // 15.0 -> 8.0 大幅削減
         .show(ui, |ui| {
@@ -243,7 +249,7 @@ fn draw_section_with_height(
                 ui.label(
                     egui::RichText::new(title)
                         .strong()
-                        .color(Color32::from_gray(160))
+                        .color(Color32::from_gray(60))
                         .size(10.0),
                 );
                 ui.add_space(6.0);
