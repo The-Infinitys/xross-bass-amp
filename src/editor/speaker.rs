@@ -65,16 +65,6 @@ impl<'a> SpeakerVisualizer<'a> {
                 positions.push(center + Vec2::new(offset_x, 0.0));
                 height * 0.38
             }
-            6 => {
-                let off_x = height * 0.5;
-                let off_y = height * 0.22;
-                for x_idx in &[-1.0, 0.0, 1.0] {
-                    for y_idx in &[-1.0, 1.0] {
-                        positions.push(center + Vec2::new(x_idx * off_x, y_idx * off_y));
-                    }
-                }
-                height * 0.18
-            }
             8 => {
                 let off_x = height * 0.65;
                 let off_y = height * 0.22;
@@ -86,6 +76,17 @@ impl<'a> SpeakerVisualizer<'a> {
                     }
                 }
                 height * 0.16
+            }
+            16 => {
+                let off_x = height * 0.5;
+                let off_y = height * 0.25;
+                let spacing_x = off_x * 0.66;
+                for x in [-2.0, -1.0, 1.0, 2.0] {
+                    for y in [-1.5, -0.5, 0.5, 1.5] {
+                        positions.push(center + Vec2::new(x * spacing_x, y * off_y));
+                    }
+                }
+                height * 0.1
             }
             _ => {
                 let offset_x = height * 0.35;

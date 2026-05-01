@@ -42,7 +42,9 @@ impl AutoNoiseGate {
             analysis_buffer: Vec::with_capacity(512),
         }
     }
-
+    pub fn initialize(&mut self, sample_rate: f32) {
+        self.sample_rate = sample_rate;
+    }
     /// バッファを解析し、各サンプルのゲート開閉フラグを生成
     pub fn pre_process(&mut self, buffer: &[f32]) {
         if self.analysis_buffer.len() != buffer.len() {

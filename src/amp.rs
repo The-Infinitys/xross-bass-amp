@@ -50,6 +50,20 @@ impl XrossBassAmp {
         if num_samples == 0 || input_channels == 0 || out_channels == 0 {
             return ProcessStatus::Normal;
         }
+
+        // --- 1. Copy Input for DI/Dry Blending ---
+        if self.internal_buffer.len() < num_samples {
+            self.internal_buffer.resize(num_samples, 0.0);
+        }
+        {
+            let input = buffer.input(0);
+            for i in 0..num_samples {
+                self.internal_buffer[i] = input[i];
+            }
+        }
+
+        // --- 2. Main Signal Path (Amp Head) ---
+        // Copy input to output channel 0 for processing
         {
             let (input, output) = buffer.io(0);
             for i in 0..num_samples {
@@ -60,8 +74,30 @@ impl XrossBassAmp {
         self.gain_proc.process(output_l);
         self.eq_proc.process(output_l);
 
-        // // 3. キャビネット・ステレオ展開処理 (AudioBufferを直接渡す)
+        // --- 3. DI Blending (Clean Mix) ---
+        let di_mix = self.params.di_mix.value();
+        if di_mix > 0.0 {
+            let output_l = buffer.output(0);
+            for i in 0..num_samples {
+                // DI信号（クリーン）を歪み/EQ後の信号にミックス
+                output_l[i] = output_l[i] * (1.0 - di_mix) + self.internal_buffer[i] * di_mix;
+            }
+        }
+
+        // --- 4. Cabinet & Stereo Processing ---
+        // CabProcessor handles stereo expansion
         self.cab_proc.process_truce(buffer);
+
+        // --- 5. Final Dry/Wet Mix ---
+        let final_mix = self.params.mix.value();
+        if final_mix < 1.0 {
+            for ch in 0..out_channels {
+                let out = buffer.output(ch);
+                for i in 0..num_samples {
+                    out[i] = out[i] * final_mix + self.internal_buffer[i] * (1.0 - final_mix);
+                }
+            }
+        }
 
         ProcessStatus::Normal
     }
@@ -69,7 +105,6 @@ impl XrossBassAmp {
     pub fn params(&self) -> Arc<XrossBassAmpParams> {
         self.params.clone()
     }
-
     pub fn ui(&self) -> Box<dyn Editor> {
         crate::editor::create_editor(self.params())
     }

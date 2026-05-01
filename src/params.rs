@@ -13,20 +13,20 @@ pub struct XrossBassAmpParams {
     pub input_gain: FloatParam,
 
     #[param(
-        name = "Drive",
+        name = "Gain",
         range = "linear(0.0, 1.0)",
         default = 0.5,
         smooth = "exp(50)"
     )]
-    pub drive: FloatParam,
+    pub gain: FloatParam,
 
     #[param(
-        name = "Distortion",
+        name = "Grit",
         range = "linear(0.0, 1.0)",
         default = 0.5,
         smooth = "exp(50)"
     )]
-    pub distortion: FloatParam,
+    pub grit: FloatParam,
 
     #[param(
         name = "Master",
@@ -38,28 +38,28 @@ pub struct XrossBassAmpParams {
     pub master_gain: FloatParam,
 
     #[param(
-        name = "Style Low",
+        name = "Low Comp",
         range = "linear(0.0, 1.0)",
         default = 0.5,
         smooth = "exp(50)"
     )]
-    pub style_low: FloatParam,
+    pub low_comp: FloatParam,
 
     #[param(
-        name = "Style Mid",
+        name = "Focus",
         range = "linear(0.0, 1.0)",
         default = 0.5,
         smooth = "exp(50)"
     )]
-    pub style_mid: FloatParam,
+    pub focus: FloatParam,
 
     #[param(
-        name = "Style High",
+        name = "Attack",
         range = "linear(0.0, 1.0)",
         default = 0.5,
         smooth = "exp(50)"
     )]
-    pub style_high: FloatParam,
+    pub attack: FloatParam,
 
     // --- 2. EQ Section ---
     #[param(
@@ -110,13 +110,13 @@ pub struct XrossBassAmpParams {
     // --- 3. Cab Section ---
     #[param(
         name = "Speaker Size",
-        range = "linear(8.0, 15.0)",
-        default = 12.0,
+        range = "linear(10.0,20.0)",
+        default = 15.0,
         smooth = "exp(50)"
     )]
     pub speaker_size: FloatParam,
 
-    #[param(name = "Speaker Count", range = "linear(1, 8)", default = 4)]
+    #[param(name = "Speaker Count", range = "linear(1, 16)", default = 4)]
     pub speaker_count: IntParam,
 
     #[param(
@@ -169,16 +169,16 @@ pub struct XrossBassAmpParams {
 
     // --- 4. Effects Section ---
     #[param(
-        name = "Sag",
+        name = "Mix",
         range = "linear(0.0, 1.0)",
         default = 0.2,
         smooth = "exp(50)"
     )]
-    pub sag: FloatParam,
+    pub mix: FloatParam,
 
     #[param(
         name = "Tight",
-        range = "linear(20.0, 500.0)",
+        range = "linear(20.0, 100.0)",
         default = 80.0,
         unit = "Hz",
         smooth = "exp(50)"
@@ -186,10 +186,10 @@ pub struct XrossBassAmpParams {
     pub tight: FloatParam,
 
     #[param(
-        name = "Reverb Mix",
+        name = "DI Mix",
         range = "linear(0.0, 1.0)",
-        default = 0.1,
+        default = 0.25,
         smooth = "exp(50)"
     )]
-    pub reverb_mix: FloatParam,
+    pub di_mix: FloatParam,
 }

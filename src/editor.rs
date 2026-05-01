@@ -23,7 +23,7 @@ fn get_vibrant_rainbow_color(index: usize, total: usize) -> Color32 {
 }
 pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
     // ターゲットサイズを定義（このサイズをベースに描画）
-    let width = 840;
+    let width = 920;
     let height = 640;
     let bg = Background::new();
 
@@ -38,58 +38,71 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                 bg.draw(ui);
 
                 let mut color_idx = 0;
-                let total_knobs = 15;
+                let total_knobs = 20;
 
-                // 外周の余白をさらにタイトに (20, 15 -> 12, 10)
+                // 外周の余白をさらにタイトに
                 let container_rect = ui.max_rect().shrink2(Vec2::new(12.0, 10.0));
 
                 ui.allocate_new_ui(UiBuilder::new().max_rect(container_rect), |ui| {
                     ui.vertical(|ui| {
                         // --- ヘッダー（ロゴ） ---
                         ui.vertical_centered(|ui| {
-                            Logo::draw(ui, 30.0); // さらに小型化
+                            Logo::draw(ui, 30.0);
                         });
-                        ui.add_space(2.0); // 隙間を最小限に
+                        ui.add_space(2.0);
 
                         // --- 上段: アンプヘッド (コントロール類) ---
                         ui.horizontal_top(|ui| {
-                            ui.spacing_mut().item_spacing.x = 2.0; // セクション間を詰める
+                            ui.spacing_mut().item_spacing.x = 2.0;
 
-                            draw_section_weighted(ui, "GAIN", 3.0, |ui| {
+                            draw_section_weighted(ui, "GAIN", 4.0, |ui| {
                                 ui.horizontal(|ui| {
-                                    ui.spacing_mut().item_spacing.x = 2.0; // ノブ間を極限まで詰める
-                                    for k in [
+                                    ui.spacing_mut().item_spacing.x = 2.0;
+                                    ui.add(Knob::new(
                                         &params.input_gain,
-                                        &params.drive,
-                                        &params.distortion,
+                                        get_vibrant_rainbow_color(color_idx, total_knobs),
+                                    ));
+                                    color_idx += 1;
+                                    ui.add(Knob::new(
+                                        &params.gain,
+                                        get_vibrant_rainbow_color(color_idx, total_knobs),
+                                    ));
+                                    color_idx += 1;
+
+                                    ui.add(StackedKnob::new(
+                                        &params.low_comp,
+                                        &params.grit,
+                                        get_vibrant_rainbow_color(color_idx, total_knobs),
+                                        get_vibrant_rainbow_color(color_idx + 1, total_knobs),
+                                    ));
+                                    color_idx += 2;
+
+                                    ui.add(StackedKnob::new(
+                                        &params.focus,
+                                        &params.attack,
+                                        get_vibrant_rainbow_color(color_idx, total_knobs),
+                                        get_vibrant_rainbow_color(color_idx + 1, total_knobs),
+                                    ));
+                                    color_idx += 2;
+
+                                    ui.add(Knob::new(
                                         &params.master_gain,
-                                    ] {
-                                        ui.add(Knob::new(
-                                            k,
-                                            get_vibrant_rainbow_color(color_idx, total_knobs),
-                                        ));
-                                        color_idx += 1;
-                                    }
+                                        get_vibrant_rainbow_color(color_idx, total_knobs),
+                                    ));
+                                    color_idx += 1;
                                 });
                             });
 
-                            draw_section_weighted(ui, "EQUALIZER", 5.0, |ui| {
+                            draw_section_weighted(ui, "EQ", 3.0, |ui| {
                                 ui.horizontal(|ui| {
                                     ui.spacing_mut().item_spacing.x = 2.0;
                                     for k in [
-                                        (&params.style_low, &params.eq_low),
-                                        (&params.style_mid, &params.eq_mid),
-                                        (&params.style_high, &params.eq_high),
+                                        &params.eq_low,
+                                        &params.eq_mid,
+                                        &params.eq_high,
+                                        &params.presence,
+                                        &params.resonance,
                                     ] {
-                                        ui.add(StackedKnob::new(
-                                            k.0,
-                                            k.1,
-                                            get_vibrant_rainbow_color(color_idx, total_knobs),
-                                            get_vibrant_rainbow_color(color_idx + 1, total_knobs),
-                                        ));
-                                        color_idx += 2;
-                                    }
-                                    for k in [&params.presence, &params.resonance] {
                                         ui.add(Knob::new(
                                             k,
                                             get_vibrant_rainbow_color(color_idx, total_knobs),
@@ -102,7 +115,7 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                             draw_section_weighted(ui, "EFFECT", 3.0, |ui| {
                                 ui.horizontal(|ui| {
                                     ui.spacing_mut().item_spacing.x = 2.0;
-                                    for k in [&params.sag, &params.tight, &params.reverb_mix] {
+                                    for k in [&params.tight, &params.di_mix, &params.mix] {
                                         ui.add(Knob::new(
                                             k,
                                             get_vibrant_rainbow_color(color_idx, total_knobs),
@@ -113,10 +126,9 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                             });
                         });
 
-                        ui.add_space(6.0); // 段落間のスペース
+                        ui.add_space(6.0);
 
                         // --- 下段: キャビネットセクション ---
-                        // 高さが足りない場合に備え、最低限の高さを確保しつつ余白を使う
                         let cab_height = ui.available_height().at_most(400.0);
                         draw_section_with_height(
                             ui,
@@ -125,7 +137,7 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                             |ui| {
                                 ui.vertical(|ui| {
                                     ui.horizontal(|ui| {
-                                        ui.spacing_mut().item_spacing.x = 15.0; // 横の密度を上げる
+                                        ui.spacing_mut().item_spacing.x = 15.0;
 
                                         let mic_colors = [
                                             Color32::from_rgb(0, 180, 255),
@@ -159,14 +171,18 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                                                 Color32::GOLD,
                                             ));
                                             ui.add(LinearSlider::new(
-                                                &params.room_mix,
-                                                Color32::BLACK,
+                                                &params.room_size,
+                                                Color32::LIGHT_BLUE,
                                             ));
                                         });
 
                                         ui.vertical(|ui| {
-                                            ui.label(RichText::new("Speakers").strong().size(10.0));
-                                            ui.add_space(2.0);
+                                            ui.label(
+                                                RichText::new("Speakers")
+                                                    .color(Color32::BLACK)
+                                                    .strong()
+                                                    .size(10.0),
+                                            );
                                             ui.horizontal(|ui| {
                                                 ui.spacing_mut().item_spacing.x = 2.0;
                                                 for &count in &[1, 2, 4, 8, 16] {
@@ -192,6 +208,11 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                                                     }
                                                 }
                                             });
+                                            ui.add_space(6.0);
+                                            ui.add(LinearSlider::new(
+                                                &params.room_mix,
+                                                Color32::BLACK,
+                                            ));
                                         });
                                     });
 
