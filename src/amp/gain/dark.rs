@@ -1,4 +1,6 @@
+use crate::params::XrossBassAmpParams;
 use std::f32::consts::PI;
+use std::sync::Arc;
 
 #[derive(Default, Clone, Copy)]
 pub struct Biquad {
@@ -29,18 +31,6 @@ pub struct DarkDistortion {
     sample_rate: f32,
 }
 
-pub struct DarkParams {
-    pub drive: f32,
-    pub dist: f32,
-    pub sag: f32,
-    pub tight: f32,
-    pub focus: f32,
-    pub attack: f32,
-    pub s_low: f32,
-    pub s_mid: f32,
-    pub s_high: f32,
-}
-
 impl DarkDistortion {
     pub fn new(sample_rate: f32) -> Self {
         Self {
@@ -62,39 +52,44 @@ impl DarkDistortion {
     }
 
     #[inline(always)]
-    fn drive_core(&mut self, input: f32, p: &DarkParams) -> f32 {
-        if p.drive <= 0.01 {
+    fn drive_core(&mut self, input: f32, params: &Arc<XrossBassAmpParams>) -> f32 {
+        let drive = params.gain.value();
+        if drive <= 0.001 {
             return input;
         }
 
-        // 1. PRE-FILTERING (Tightness & Character)
-        // 低域の飽和を防ぎ、解像度を保つ
-        let tight_norm = (p.tight * 2.0 * PI / self.sample_rate).clamp(0.005, 0.8);
+        // 1. PRE-FILTERING (Tight & Focus)
+        // Tight: ローエンドのダブつきを抑える
+        let tight_hz = params.tight.value();
+        let tight_norm = (tight_hz * 2.0 * PI / self.sample_rate).clamp(0.005, 0.8);
         self.pre_hp += tight_norm * (input - self.pre_hp);
         let mut x = input - self.pre_hp;
 
-        // Focus (Mid Clarity): Boost around 600Hz before distortion
-        let focus_boost = p.focus * 12.0;
-        let focus_gain = 10.0f32.powf(focus_boost / 20.0);
-        // シンプルな簡易フィルタ
-        x *= 1.0 + (focus_gain - 1.0) * 0.5;
+        // Focus: 中音域の押し出し。歪みの食いつきを良くする。
+        let focus = params.focus.value();
+        let focus_gain = 10.0f32.powf((focus * 10.0) / 20.0);
+        x *= focus_gain;
 
-        // Attack (Picking Definition): Boost around 2.8kHz before distortion
-        let attack_boost = p.attack * 15.0;
-        let attack_gain = 10.0f32.powf(attack_boost / 20.0);
-        x *= 1.0 + (attack_gain - 1.0) * 0.3;
+        // Attack: ピッキング時の高域成分。ジャリッとしたエッジを作る。
+        let attack = params.attack.value();
+        let attack_gain = 10.0f32.powf((attack * 12.0) / 20.0);
+        x *= 1.0 + (attack_gain - 1.0) * 0.4;
 
-        // 2. GAIN STAGING & SAG (Low Comp)
-        let sag_val = 1.0 - (self.envelope * p.sag * 0.5);
-        let drive_gain = 1.0 + p.drive.powf(2.0) * 80.0;
+        // 2. GAIN STAGING & DYNAMIC SAG
+        // Low Comp: 低域の包絡線に応じてゲインを抑え、コンプレッション感を出す。
+        let low_comp = params.low_comp.value();
+        let sag_val = 1.0 - (self.envelope * low_comp * 0.6);
+        let grit = params.grit.value();
+        let drive_gain = 1.0 + drive.powf(2.0) * 60.0 * (1.0 + grit);
         x *= drive_gain * sag_val;
 
-        // 3. ASYMMETRIC SATURATION
-        let fb_amount = 0.05 + p.dist * 0.25;
+        // 3. NON-LINEAR SATURATION (Asymmetric)
+        let dist = params.grit.value();
+        let fb_amount = 0.02 + dist * 0.2;
         let mut sig = x + (self.feedback_state * fb_amount);
 
-        let asymmetry = 0.1 * p.dist; // 歪ませるほど非対称にし、倍音を増やす
-        let drive_factor = 1.5 + p.dist * 2.5;
+        let asymmetry = 0.15 * dist;
+        let drive_factor = 2.0 + dist * 3.0;
 
         if sig > 0.0 {
             sig = (sig * drive_factor).tanh();
@@ -104,59 +99,53 @@ impl DarkDistortion {
         }
         self.feedback_state = sig;
 
-        // 4. CHARACTER EQ (Scoop & Resonance)
-        // Mid Scoop: メタル的な質感を付与
-        let mid_scoop = (-p.s_mid).max(0.0) * 0.5;
-        sig -= (sig - sig.powi(3)) * mid_scoop;
-
-        // Low Resonance: 低域の重みを強調
-        let low_boost = p.s_low.max(0.0) * 0.4;
+        // 4. BASS RESONANCE
+        // EQ Lowの値を反映して、歪みの後に重低音のレゾナンスを付加
+        let resonance = params.resonance.value();
+        let low_boost = (params.eq_low.value().max(0.0) / 18.0) * 0.5 + resonance * 0.2;
         self.low_resonance += 0.1 * (sig - self.low_resonance);
         sig += self.low_resonance * low_boost;
 
-        // 5. POST-PROCESSING (High-cut & Slew)
+        // 5. POST-FILTERING (Tone Shaping)
+        // High-cut: 歪みによる不要な超高域ノイズをカット
+        let high_val = params.eq_high.value();
         let post_cutoff =
-            (4000.0 + p.s_high * 8000.0 + (1.0 - p.drive) * 4000.0) * 2.0 * PI / self.sample_rate;
-        self.post_tight += post_cutoff.clamp(0.01, 0.9) * (sig - self.post_tight);
+            (4500.0 + high_val * 100.0 + (1.0 - drive) * 3000.0) * 2.0 * PI / self.sample_rate;
+        self.post_tight += post_cutoff.clamp(0.01, 0.95) * (sig - self.post_tight);
         sig = self.post_tight;
 
-        // Slew Rate: 物理的な回路の「鈍さ」をシミュレートして高域のトゲを取る
-        let max_step = 0.05 + (1.0 - p.drive) * 0.5;
+        // Slew Rate: 滑らかな歪みの質感を生む
+        let max_step = 0.1 + (1.0 - dist) * 0.4;
         let diff = sig - self.slew_state;
         self.slew_state += diff.clamp(-max_step, max_step);
 
         self.slew_state
     }
 
-    pub fn process_sample(&mut self, input: f32, p: &DarkParams) -> f32 {
-        // オーバーサンプリング (2倍)
-        let mut output_sum = 0.0;
+    pub fn process_sample(&mut self, input: f32, params: &Arc<XrossBassAmpParams>) -> f32 {
+        // エンベロープ・フォロワー (Low Comp用)
         self.envelope += (input.abs() - self.envelope) * 0.05;
 
+        // 2倍オーバーサンプリング
+        let mut output_sum = 0.0;
         for i in 0..2 {
             let fraction = i as f32 * 0.5;
             let sub_sample = self.prev_input + (input - self.prev_input) * fraction;
-            output_sum += self.drive_core(sub_sample, p);
+            output_sum += self.drive_core(sub_sample, params);
         }
         self.prev_input = input;
 
         let raw_out = output_sum * 0.5;
 
-        // エイリアシング除去 LPF
+        // アンチエイリアシング LPF (18kHz)
         let (a1, a2, b0, b1, b2) = Self::calculate_biquad_lpf(self.sample_rate, 18000.0);
         let filtered_out = self.os_lpf_biquad.process(raw_out, a1, a2, b0, b1, b2);
 
         // DC Block
         let dc_fix = filtered_out - self.dc_block;
-        self.dc_block = filtered_out + 0.995 * (self.dc_block - filtered_out);
+        self.dc_block = filtered_out + 0.997 * (self.dc_block - filtered_out);
 
-        dc_fix * 0.5 // 最終音量調整
-    }
-
-    pub fn process_slice(&mut self, slice: &mut [f32], p: &DarkParams) {
-        for sample in slice.iter_mut() {
-            *sample = self.process_sample(*sample, p);
-        }
+        dc_fix
     }
 
     fn calculate_biquad_lpf(sample_rate: f32, cutoff: f32) -> (f32, f32, f32, f32, f32) {

@@ -1,7 +1,7 @@
 use crate::params::XrossBassAmpParams;
 use std::sync::Arc;
 mod dark;
-use dark::{DarkDistortion, DarkParams};
+use dark::DarkDistortion;
 mod noise_gate;
 use noise_gate::AutoNoiseGate;
 
@@ -29,41 +29,35 @@ impl GainProcessor {
     }
 
     pub fn process(&mut self, input: &mut [f32]) {
-        // 1. セーフティチェック (NaN/Inf対策)
+        // 1. セーフティチェック
         input.iter_mut().for_each(|i| {
             if !i.is_finite() {
                 *i = 0.0;
             }
         });
 
-        // 2. プリ・ノイズゲート
+        // 2. プリ・ノイズゲート (歪ませる前の入力を監視)
         self.noise_gate.pre_process(input);
 
-        // 3. インプットゲイン適用
+        // 3. インプットゲイン
         let input_factor = 10.0f32.powf(self.params.input_gain.value() / 20.0);
-        input.iter_mut().for_each(|i| *i *= input_factor);
+        if input_factor != 1.0 {
+            input.iter_mut().for_each(|i| *i *= input_factor);
+        }
 
-        // 4. メイン歪みプロセッサ (DarkDistortion)
-        // params.rs の各値を DarkDistortion の引数にマッピング
-        let dark_params = DarkParams {
-            drive: self.params.gain.value(),
-            dist: self.params.grit.value(),
-            sag: self.params.low_comp.value(),
-            tight: self.params.tight.value(),
-            focus: self.params.focus.value(),
-            attack: self.params.attack.value(),
-            s_low: self.params.eq_low.value() / 18.0,
-            s_mid: self.params.eq_mid.value() / 18.0,
-            s_high: self.params.eq_high.value() / 18.0,
-        };
+        // 4. メイン歪み処理
+        // DarkDistortion内部でparamsを直接参照
+        for sample in input.iter_mut() {
+            *sample = self.metal.process_sample(*sample, &self.params);
+        }
 
-        self.metal.process_slice(input, &dark_params);
-
-        // 5. ポスト・ノイズゲート
+        // 5. ポスト・ノイズゲート (歪み後のノイズをカット)
         self.noise_gate.post_process(input);
 
-        // 6. マスターゲイン適用
+        // 6. マスターゲイン
         let master_factor = 10.0f32.powf(self.params.master_gain.value() / 20.0);
-        input.iter_mut().for_each(|i| *i *= master_factor);
+        if master_factor != 1.0 {
+            input.iter_mut().for_each(|i| *i *= master_factor);
+        }
     }
 }

@@ -17,8 +17,10 @@ pub struct XrossBassAmp {
     eq_proc: EqProcessor,
     cab_proc: CabProcessor,
 
-    // 内部処理用のモノラル一時バッファ（ヒープ確保を避けるため再利用）
-    internal_buffer: Vec<f32>,
+    /// 完全なクリーン音（インプット直）の保持用
+    clean_buffer: Vec<f32>,
+    /// Gain/Eqを通った後の「キャビなし歪み音」の保持用
+    head_buffer: Vec<f32>,
 }
 
 impl XrossBassAmp {
@@ -28,7 +30,8 @@ impl XrossBassAmp {
             eq_proc: EqProcessor::new(params.clone()),
             cab_proc: CabProcessor::new(params.clone()),
             params,
-            internal_buffer: Vec::with_capacity(512), // 一般的なバッファサイズで初期化
+            clean_buffer: Vec::with_capacity(512),
+            head_buffer: Vec::with_capacity(512),
         }
     }
 
@@ -38,65 +41,67 @@ impl XrossBassAmp {
         self.eq_proc.initialize(sample_rate);
         self.cab_proc.initialize(sample_rate);
 
-        // 最大ブロックサイズに合わせてバッファを確保
-        self.internal_buffer.resize(max_block_size, 0.0);
+        self.clean_buffer.resize(max_block_size, 0.0);
+        self.head_buffer.resize(max_block_size, 0.0);
     }
 
     pub fn process_truce(&mut self, buffer: &mut AudioBuffer) -> ProcessStatus {
         let num_samples = buffer.num_samples();
-        let input_channels = buffer.num_input_channels();
         let out_channels = buffer.num_output_channels();
 
-        if num_samples == 0 || input_channels == 0 || out_channels == 0 {
+        if num_samples == 0 || out_channels == 0 {
             return ProcessStatus::Normal;
         }
 
-        // --- 1. Copy Input for DI/Dry Blending ---
-        if self.internal_buffer.len() < num_samples {
-            self.internal_buffer.resize(num_samples, 0.0);
+        // バッファサイズの安全確保
+        if self.clean_buffer.len() < num_samples {
+            self.clean_buffer.resize(num_samples, 0.0);
+            self.head_buffer.resize(num_samples, 0.0);
         }
+
+        // --- 1. 原音(Clean DI)をキャプチャ ---
         {
             let input = buffer.input(0);
-            self.internal_buffer[..num_samples].copy_from_slice(&input[..num_samples]);
+            self.clean_buffer[..num_samples].copy_from_slice(&input[..num_samples]);
         }
 
-        // --- 2. Main Signal Path (Amp Head) ---
-        // Copy input to output channel 0 for processing
-        {
-            let (input, output) = buffer.io(0);
-            output[..num_samples].copy_from_slice(&input[..num_samples]);
-        }
-        let output_l = buffer.output(0);
-        self.gain_proc.process(output_l);
-        self.eq_proc.process(output_l);
+        // --- 2. Amp Head処理 (Gain -> EQ) ---
+        // head_bufferに歪みサウンドを作成する
+        self.head_buffer[..num_samples].copy_from_slice(&self.clean_buffer[..num_samples]);
+        self.gain_proc.process(&mut self.head_buffer[..num_samples]);
+        self.eq_proc.process(&mut self.head_buffer[..num_samples]);
 
-        // --- 3. DI Blending (Clean Mix) ---
+        // --- 3. DI Mix (Clean vs 歪みライン音) ---
+        // ここで「歪んでいるがキャビを通っていない音」を決定する
         let di_mix = self.params.di_mix.value();
-        if di_mix > 0.0 {
-            let output_l = buffer.output(0);
-            for (sample, &di_sample) in output_l
-                .iter_mut()
-                .zip(&self.internal_buffer)
-                .take(num_samples)
-            {
-                // DI信号（クリーン）を歪み/EQ後の信号にミックス
-                *sample = *sample * (1.0 - di_mix) + di_sample * di_mix;
-            }
+        let mut mixed_head_signal = vec![0.0f32; num_samples]; // 一時的なミックス用
+
+        for i in 0..num_samples {
+            // di_mix = 0.0 で全歪み、1.0 で全クリーン（一般的なDIブレンドの逆ならここを調整）
+            // ここでは di_mix 0.0(Drive 100%) ~ 1.0(Clean 100%) と仮定
+            mixed_head_signal[i] =
+                self.head_buffer[i] * (1.0 - di_mix) + self.clean_buffer[i] * di_mix;
         }
 
-        // --- 4. Cabinet & Stereo Processing ---
-        // CabProcessor handles stereo expansion
+        // --- 4. Cabinet Processing ---
+        // mixed_head_signal を output(0) に戻してキャビに通す
+        {
+            let output_l = buffer.output(0);
+            output_l[..num_samples].copy_from_slice(&mixed_head_signal);
+        }
+
+        // CabProcessor内でステレオ化やIR畳み込みが行われる想定
         self.cab_proc.process_truce(buffer);
 
-        // --- 5. Final Dry/Wet Mix ---
-        let final_mix = self.params.mix.value();
-        if final_mix < 1.0 {
+        // --- 5. Speaker Mix (Final Dry/Wet) ---
+        // キャビを通した後の音と、さきほどの mixed_head_signal (キャビなし) を混ぜる
+        let speaker_mix = self.params.speaker_mix.value();
+        if speaker_mix < 1.0 {
             for ch in 0..out_channels {
                 let out = buffer.output(ch);
-                for (sample, &di_sample) in
-                    out.iter_mut().zip(&self.internal_buffer).take(num_samples)
-                {
-                    *sample = *sample * final_mix + di_sample * (1.0 - final_mix);
+                for (i, sample) in out.iter_mut().enumerate().take(num_samples) {
+                    // speaker_mix = 1.0 でフルキャビ、0.0 でキャビなし（ライン歪み/クリーン）
+                    *sample = *sample * speaker_mix + mixed_head_signal[i] * (1.0 - speaker_mix);
                 }
             }
         }
@@ -107,6 +112,7 @@ impl XrossBassAmp {
     pub fn params(&self) -> Arc<XrossBassAmpParams> {
         self.params.clone()
     }
+
     pub fn ui(&self) -> Box<dyn Editor> {
         crate::editor::create_editor(self.params())
     }

@@ -63,7 +63,7 @@ pub struct XrossBassAmpParams {
 
     // --- 2. EQ Section ---
     #[param(
-        name = "Eq Low",
+        name = "Low",
         range = "linear(-18.0, 18.0)",
         default = 0.0,
         unit = "dB",
@@ -72,7 +72,7 @@ pub struct XrossBassAmpParams {
     pub eq_low: FloatParam,
 
     #[param(
-        name = "Eq Mid",
+        name = "Mid",
         range = "linear(-18.0, 18.0)",
         default = 0.0,
         unit = "dB",
@@ -81,7 +81,7 @@ pub struct XrossBassAmpParams {
     pub eq_mid: FloatParam,
 
     #[param(
-        name = "Eq High",
+        name = "High",
         range = "linear(-18.0, 18.0)",
         default = 0.0,
         unit = "dB",
@@ -169,12 +169,12 @@ pub struct XrossBassAmpParams {
 
     // --- 4. Effects Section ---
     #[param(
-        name = "Mix",
+        name = "Speaker Mix",
         range = "linear(0.0, 1.0)",
-        default = 0.2,
+        default = 0.75,
         smooth = "exp(50)"
     )]
-    pub mix: FloatParam,
+    pub speaker_mix: FloatParam,
 
     #[param(
         name = "Tight",
@@ -188,7 +188,7 @@ pub struct XrossBassAmpParams {
     #[param(
         name = "DI Mix",
         range = "linear(0.0, 1.0)",
-        default = 0.25,
+        default = 0.7,
         smooth = "exp(50)"
     )]
     pub di_mix: FloatParam,

@@ -115,7 +115,7 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                             draw_section_weighted(ui, "EFFECT", 3.0, |ui| {
                                 ui.horizontal(|ui| {
                                     ui.spacing_mut().item_spacing.x = 2.0;
-                                    for k in [&params.tight, &params.di_mix, &params.mix] {
+                                    for k in [&params.tight, &params.di_mix, &params.speaker_mix] {
                                         ui.add(Knob::new(
                                             k,
                                             get_vibrant_rainbow_color(color_idx, total_knobs),
