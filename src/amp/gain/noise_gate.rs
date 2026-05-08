@@ -5,17 +5,17 @@ struct GateState {
     gate_gain: f32,
     hold_timer: i32,
 
-    // エンベロープ（帯域別）
-    env_full: f32, // 全帯域の音量
-    env_high: f32, // 高域（1kHz以上）の音量
+    // エンベロープ（帯域別解析）
+    env_low: f32,  // 400Hz以下（ベースの基本波・芯）
+    env_high: f32, // 2kHz以上（アタックおよびヒスノイズ成分）
 
-    // ノイズフロア（帯域別）
-    noise_floor_full: f32,
+    // ノイズフロア（高域ノイズに特化して学習）
     noise_floor_high: f32,
 
     // フィルタ状態
-    hp_state: f32,       // 解析用高域抽出フィルタの状態
-    post_lpf_state: f32, // 閉じる際のスムージングフィルタ
+    lp_state: f32,           // 解析用LPF
+    hp_state: f32,           // 解析用HPF
+    noise_filter_state: f32, // 最終出力用の動的ハイカットフィルタ
 
     prev_input: f32,
     noise_measure_timer: i32,
@@ -30,24 +30,22 @@ pub struct AutoNoiseGate {
 
 impl AutoNoiseGate {
     pub fn new(sample_rate: f32) -> Self {
-        let state = GateState {
-            gate_gain: 1.0,
-            noise_floor_full: 0.001,
-            noise_floor_high: 0.0005,
-            adaptive_sensitivity: 6.0,
-            ..Default::default()
-        };
-
-        Self {
+        let mut s = Self {
             sample_rate,
-            state,
+            state: GateState::default(),
             analysis_buffer: Vec::with_capacity(512),
-        }
+        };
+        s.state.gate_gain = 1.0;
+        s.state.noise_floor_high = 0.0005;
+        s.state.adaptive_sensitivity = 6.0;
+        s
     }
+
     pub fn initialize(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate;
     }
-    /// バッファを解析し、各サンプルのゲート開閉フラグを生成
+
+    /// バッファを解析し、ゲートの開閉およびノイズレベルを特定
     pub fn pre_process(&mut self, buffer: &[f32]) {
         if self.analysis_buffer.len() != buffer.len() {
             self.analysis_buffer.resize(buffer.len(), false);
@@ -55,28 +53,24 @@ impl AutoNoiseGate {
 
         let state = &mut self.state;
 
-        // 設定定数
-        let measure_window = (0.2 * self.sample_rate) as i32; // 200msの静寂でノイズ学習
-        let nf_max = 0.015; // ノイズフロア学習の上限 (-36dB)
-        let nf_min = 0.00003; // ノイズフロア学習の下限 (-90dB)
-
-        // 簡易HPF係数 (約1.5kHzで高域抽出)
-        let hp_coef = -(2.0 * PI * 1500.0 / self.sample_rate).exp() + 1.0;
+        // サンプルレートに基づいた解析用フィルタ係数
+        let lp_alpha = 1.0 - (-2.0 * PI * 400.0 / self.sample_rate).exp();
+        let hp_alpha = 1.0 - (-2.0 * PI * 2000.0 / self.sample_rate).exp();
 
         for (i, &sample) in buffer.iter().enumerate() {
             let abs_in = sample.abs();
 
-            // --- 1. 帯域別エンベロープ抽出 ---
-            // 全帯域
-            state.env_full += 0.1 * (abs_in - state.env_full);
+            // --- 1. マルチバンド・エンベロープ解析 ---
+            // 低域（芯の維持判定用）
+            state.lp_state += lp_alpha * (abs_in - state.lp_state);
+            state.env_low = state.lp_state;
 
-            // 高域 (1次HPF経由)
+            // 高域（アタック判定およびノイズフロア学習用）
             let hp_out = abs_in - state.hp_state;
-            state.hp_state += hp_coef * hp_out;
+            state.hp_state += hp_alpha * hp_out;
             state.env_high += 0.1 * (hp_out.abs() - state.env_high);
 
-            // --- 2. 賢いマルチバンド・ノイズ計測 ---
-            // 演奏中でなく(0.02以下)、かつ信号が安定しているか
+            // --- 2. 賢いノイズ学習 (高域ターゲット) ---
             let is_quiet = abs_in < 0.02;
             let is_stable = (abs_in - state.prev_input).abs() < 0.001;
             state.prev_input = abs_in;
@@ -87,60 +81,39 @@ impl AutoNoiseGate {
                 state.noise_measure_timer = 0;
             }
 
-            if state.noise_measure_timer > measure_window {
-                // 帯域別にノイズレベルを学習
-                let lr = 0.01; // 学習率
-                state.noise_floor_full += lr * (state.env_full - state.noise_floor_full);
+            // 200msの静寂で学習
+            if state.noise_measure_timer > (0.2 * self.sample_rate) as i32 {
+                let lr = 0.01;
                 state.noise_floor_high += lr * (state.env_high - state.noise_floor_high);
             }
+            state.noise_floor_high = state.noise_floor_high.clamp(0.00001, 0.01);
 
-            // クランプ処理
-            state.noise_floor_full = state.noise_floor_full.clamp(nf_min, nf_max);
-            state.noise_floor_high = state.noise_floor_high.clamp(nf_min * 0.5, nf_max * 0.8);
+            // --- 3. ゲート判定ロジック ---
+            let high_th = state.noise_floor_high * state.adaptive_sensitivity;
 
-            // --- 3. 自動感度調整 (SNRに基づく) ---
-            let snr = (state.env_full / (state.noise_floor_full + 1e-9)).max(1.0);
-            let target_sens = if snr < 2.0 {
-                14.0
-            } else if snr > 12.0 {
-                4.0
-            } else {
-                8.0
-            };
-            state.adaptive_sensitivity += 0.001 * (target_sens - state.adaptive_sensitivity);
-
-            // --- 4. ゲート判定ロジック ---
-            // 高域と全帯域の両方をチェック
-            let full_th = state.noise_floor_full * state.adaptive_sensitivity;
-            let high_th = state.noise_floor_high * (state.adaptive_sensitivity * 0.7);
-
-            // どちらかの帯域がしきい値を超えていれば「音あり」とみなす
-            // ヒステリシス：一度開いたら、しきい値の半分まで閉じるのを待つ
+            // ヒステリシス：一度開いたら、低い閾値（0.5倍）まで閉じない
             let is_open = if state.gate_gain < 0.1 {
-                state.env_full > full_th || state.env_high > high_th
+                state.env_high > high_th || state.env_low > 0.012
             } else {
-                state.env_full > full_th * 0.5 || state.env_high > high_th * 0.5
+                state.env_high > high_th * 0.5 || state.env_low > 0.006
             };
 
             self.analysis_buffer[i] = is_open;
         }
     }
 
-    /// Preの結果に基づき、ゲインと動的フィルタを適用
+    /// 解析結果に基づき、ゲインと「動的ハイカット」を適用
     pub fn post_process(&mut self, buffer: &mut [f32]) {
         let state = &mut self.state;
 
-        // ギター用にチューニングされた時間定数
-        let hold_samples = (0.015 * self.sample_rate) as i32; // 15ms
-        let release_ms = 70.0;
-
-        let atk_coef = (-1.0 / (0.0008 * self.sample_rate)).exp(); // 高速アタック
-        let rel_coef = (-1.0 / (release_ms * self.sample_rate / 1000.0)).exp();
+        let hold_samples = (0.045 * self.sample_rate) as i32; // 45ms
+        let atk_alpha = 1.0 - (-1.0 / (0.001 * self.sample_rate)).exp(); // 1ms (高速アタック)
+        let rel_alpha = 1.0 - (-1.0 / (0.110 * self.sample_rate)).exp(); // 110ms (自然なリリース)
 
         for (i, sample) in buffer.iter_mut().enumerate() {
             let is_detected = self.analysis_buffer[i];
 
-            // ターゲットゲインの決定とホールド処理
+            // ターゲットゲインの計算
             let target_gain = if is_detected {
                 state.hold_timer = hold_samples;
                 1.0
@@ -151,28 +124,32 @@ impl AutoNoiseGate {
                 0.0
             };
 
-            // ゲインスムージング
-            let coef = if target_gain > state.gate_gain {
-                atk_coef
+            // ゲインのスムージング
+            let alpha = if target_gain > state.gate_gain {
+                atk_alpha
             } else {
-                rel_coef
+                rel_alpha
             };
-            state.gate_gain = target_gain + coef * (state.gate_gain - target_gain);
+            state.gate_gain += alpha * (target_gain - state.gate_gain);
 
-            let input_val = *sample;
-            let mut gated_sample = input_val * state.gate_gain;
+            // --- 4. Dynamic Noise Shaper (演奏中ハイカット) ---
+            // 高域成分がノイズフロアに近い場合、たとえゲートが開いていてもハイを削る
+            let noise_trigger =
+                (state.env_high / (state.noise_floor_high * 3.0 + 1e-9)).clamp(0.0, 1.0);
 
-            // --- 動的ポストフィルタ (閉じる際、高域から先に削る) ---
-            // ゲートが閉じる(gate_gainが1未満になる)につれてLPFを強くかける
-            // これにより「バッサリ切れた」感じをなくし、自然な減衰を演出する
-            let lpf_alpha = state.gate_gain.powi(3).clamp(0.05, 1.0);
-            state.post_lpf_state += lpf_alpha * (gated_sample - state.post_lpf_state);
+            // 演奏中：高域成分が少なければカットオフを1kHz付近まで落とす
+            // 閉鎖中：gate_gainの減少に伴い、さらに強力に(0.005)までフィルタを絞る
+            let cutoff_alpha = if state.gate_gain > 0.99 {
+                0.08 + 0.92 * noise_trigger.powi(2)
+            } else {
+                state.gate_gain.powi(3).clamp(0.005, 1.0)
+            };
 
-            if state.gate_gain < 0.999 {
-                gated_sample = state.post_lpf_state;
-            }
+            // ゲイン適用後の信号に動的LPFを適用
+            let gated_input = *sample * state.gate_gain;
+            state.noise_filter_state += cutoff_alpha * (gated_input - state.noise_filter_state);
 
-            *sample = gated_sample;
+            *sample = state.noise_filter_state;
         }
     }
 }

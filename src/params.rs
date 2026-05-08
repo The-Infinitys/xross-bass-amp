@@ -188,7 +188,7 @@ pub struct XrossBassAmpParams {
     #[param(
         name = "DI Mix",
         range = "linear(0.0, 1.0)",
-        default = 0.7,
+        default = 0.2,
         smooth = "exp(50)"
     )]
     pub di_mix: FloatParam,
