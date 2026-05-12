@@ -92,7 +92,7 @@ impl<'a> StackedKnob<'a> {
                     .font(font_id)
                     .text_color(Color32::BLACK)
                     .horizontal_align(egui::Align::Center)
-                    .frame(true), // ライトモードでは枠ありが見やすい
+                    .frame(false),
             );
 
             if res.changed() {

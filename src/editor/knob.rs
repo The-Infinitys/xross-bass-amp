@@ -123,7 +123,7 @@ impl<'a> Widget for Knob<'a> {
                         .font(FontId::monospace(10.0))
                         .text_color(Color32::BLACK) // 入力文字は黒
                         .horizontal_align(egui::Align::Center)
-                        .frame(true), // ライトモードは見やすさのため枠あり推奨
+                        .frame(false),
                 );
 
                 if res.changed() {

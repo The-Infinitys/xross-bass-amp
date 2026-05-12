@@ -23,7 +23,7 @@ fn get_vibrant_rainbow_color(index: usize, total: usize) -> Color32 {
 }
 pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
     // ターゲットサイズを定義（このサイズをベースに描画）
-    let width = 940;
+    let width = 906;
     let height = 640;
     let bg = Background::new();
 
@@ -55,7 +55,7 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                         ui.horizontal_top(|ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
 
-                            draw_section_weighted(ui, "GAIN", 4.0, |ui| {
+                            draw_section_weighted(ui, "GAIN", 3.5, |ui| {
                                 ui.horizontal(|ui| {
                                     ui.spacing_mut().item_spacing.x = 2.0;
                                     ui.add(Knob::new(
