@@ -37,10 +37,11 @@ impl XrossBassAmp {
 
     pub fn initialize_truce(&mut self, sr: f64, max_block_size: usize) {
         let sample_rate = sr as f32;
+        self.params.set_sample_rate(sr);
+        self.params.snap_smoothers();
         self.gain_proc.initialize(sample_rate);
         self.eq_proc.initialize(sample_rate);
         self.cab_proc.initialize(sample_rate);
-
         self.clean_buffer.resize(max_block_size, 0.0);
         self.head_buffer.resize(max_block_size, 0.0);
     }
