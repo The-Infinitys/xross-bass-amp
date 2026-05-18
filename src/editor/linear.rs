@@ -1,5 +1,6 @@
 use crate::utils::FloatParamNormalizedExt;
 use egui::{Align2, Color32, FontId, Rect, Response, Sense, Stroke, Ui, Widget, vec2};
+use truce::params::FloatParamReadF32;
 
 pub struct LinearSlider<'a> {
     param: &'a truce::params::FloatParam,

@@ -1,6 +1,7 @@
 use crate::modules::filter::{Biquad, FilterType};
 use crate::params::XrossBassAmpParams;
 use std::sync::Arc;
+use truce::params::FloatParamReadF32;
 
 pub struct EqProcessor {
     pub params: Arc<XrossBassAmpParams>,

@@ -3,6 +3,8 @@ use egui::{
     Align2, Color32, FontId, Id, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui,
     Widget, vec2,
 };
+use truce::params::FloatParamReadF32;
+
 use std::f32::consts::PI;
 
 pub struct StackedKnob<'a> {

@@ -1,5 +1,6 @@
 use crate::{params::XrossBassAmpParams, utils::WithAlpha};
 use egui::{self, Color32, Pos2, Stroke, Vec2};
+use truce::params::FloatParamReadF32;
 
 pub struct SpeakerVisualizer<'a> {
     params: &'a XrossBassAmpParams,

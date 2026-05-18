@@ -1,6 +1,7 @@
 use crate::params::XrossBassAmpParams;
 use std::f32::consts::PI;
 use std::sync::Arc;
+use truce::params::FloatParamReadF32;
 
 /// 2次フィルタ（Biquad）の状態保持用
 #[derive(Default, Clone, Copy)]

@@ -27,7 +27,7 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
     let height = 640;
     let bg = Background::new();
 
-    let editor = EguiEditor::new((width, height), move |egui_ctx, _state| {
+    let editor = EguiEditor::new(params.clone(), (width, height), move |egui_ctx, _state| {
         egui::CentralPanel::default()
             .frame(Frame::NONE)
             .show(egui_ctx, |ui| {

@@ -4,6 +4,7 @@ mod dark;
 use dark::DarkDistortion;
 mod noise_gate;
 use noise_gate::AutoNoiseGate;
+use truce::params::FloatParamReadF32;
 
 pub struct GainProcessor {
     pub params: Arc<XrossBassAmpParams>,

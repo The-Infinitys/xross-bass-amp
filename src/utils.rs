@@ -1,5 +1,5 @@
 use egui::Color32;
-use truce::params::FloatParam;
+use truce::params::{FloatParam, FloatParamReadF64};
 
 pub trait FloatParamNormalizedExt {
     fn value_normalized(&self) -> f64;
@@ -8,7 +8,7 @@ pub trait FloatParamNormalizedExt {
 
 impl FloatParamNormalizedExt for FloatParam {
     fn value_normalized(&self) -> f64 {
-        let val = self.value() as f64;
+        let val = self.value();
         let range = &self.info.range;
         range.normalize(val)
     }
@@ -22,7 +22,9 @@ impl FloatParamNormalizedExt for FloatParam {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use truce::params::{FloatParam, ParamFlags, ParamInfo, ParamRange, ParamUnit, SmoothingStyle};
+    use truce::params::{
+        FloatParam, ParamFlags, ParamInfo, ParamRange, ParamUnit, ParamValueKind, SmoothingStyle,
+    };
 
     // ヘルパー: テスト用のFloatParamを作成
     fn create_test_param(min: f64, max: f64, default: f64) -> FloatParam {
@@ -35,6 +37,7 @@ mod tests {
                 range: ParamRange::Linear { min, max },
                 default_plain: default,
                 unit: ParamUnit::Db,
+                kind: ParamValueKind::Float,
                 flags: ParamFlags::empty(), // default() ではなく empty()
             },
             SmoothingStyle::Exponential(50.0),
@@ -85,6 +88,7 @@ mod tests {
                     max: 20000.0,
                 },
                 default_plain: 1000.0,
+                kind: ParamValueKind::Float,
                 unit: ParamUnit::Hz,
                 flags: ParamFlags::empty(),
             },

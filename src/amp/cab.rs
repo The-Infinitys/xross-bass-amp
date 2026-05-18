@@ -2,6 +2,7 @@ use crate::modules::filter::{Biquad, FilterType};
 use crate::params::XrossBassAmpParams;
 use std::sync::Arc;
 use truce::core::AudioBuffer;
+use truce::params::FloatParamReadF32;
 
 const PHASE_DELAY_SIZE: usize = 2048;
 const MAX_ROOM_DELAY: usize = 192000;
