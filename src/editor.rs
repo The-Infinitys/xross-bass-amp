@@ -168,11 +168,11 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                                             );
                                             ui.add(LinearSlider::new(
                                                 &params.speaker_size,
-                                                Color32::GOLD,
+                                                Color32::GOLD.lerp_to_gamma(Color32::BLACK, 0.5),
                                             ));
                                             ui.add(LinearSlider::new(
                                                 &params.room_size,
-                                                Color32::LIGHT_BLUE,
+                                                Color32::DARK_BLUE,
                                             ));
                                         });
 
