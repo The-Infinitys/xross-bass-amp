@@ -1,0 +1,78 @@
+name: Release Audio Plugins
+
+on:
+  push:
+    tags:
+      - "v*" # v1.0.0 や v1.0.0-rc1 などのタグで起動
+  workflow_dispatch: # 手動実行ボタン
+
+jobs:
+  build-and-package:
+    name: Build & Package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            formats: "vst3,clap"
+          - os: macos-latest
+            platform: macos
+            formats: "vst3,clap,au2"
+          - os: ubuntu-latest
+            platform: linux
+            formats: "vst3,clap,lv2"
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+
+      # Linux用：ビルドに必要な依存ライブラリのインストール
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libx11-dev libgl1-mesa-dev libxext-dev libxinerama-dev libxrandr-dev libxcursor-dev
+
+      # cargo-truce CLIのインストール
+      - name: Install cargo-truce
+        run: cargo install cargo-truce --locked
+
+      # Windows / Linux用のパッケージング（--no-notarize なし）
+      - name: Build and Package Plugins (Windows/Linux)
+        if: matrix.platform != 'macos'
+        run: |
+          cargo truce package --formats ${{ matrix.formats }}
+
+      # macOS用のパッケージング（証明書がないため --no-notarize を付与）
+      - name: Build and Package Plugins (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          cargo truce package --formats ${{ matrix.formats }} --no-notarize
+
+      # タグ名にハイフン（-）が含まれているかチェックして判定
+      - name: Check if pre-release
+        id: check_release
+        shell: bash
+        run: |
+          if [[ "${{ github.ref_name }}" == *-* ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      # 生成されたパッケージ（target/dist/ 以下のファイル）をGitHub Releaseにアップロード
+      - name: Upload Artifacts to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/dist/*
+          prerelease: ${{ steps.check_release.outputs.prerelease }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
