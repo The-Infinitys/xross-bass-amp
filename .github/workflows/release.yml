@@ -39,8 +39,7 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libx11-dev libgl1-mesa-dev libxext-dev libxinerama-dev libxrandr-dev libxcursor-dev
-
+          sudo apt-get install -y pkg-config libasound2-dev libx11-dev libx11-xcb-dev libgl1-mesa-dev libxext-dev libxinerama-dev libxrandr-dev libxcursor-dev
       # cargo-truce CLIのインストール
       - name: Install cargo-truce
         run: cargo install cargo-truce --locked
