@@ -30,7 +30,7 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
     let editor = EguiEditor::new(params.clone(), (width, height), move |egui_ctx, _state| {
         egui::CentralPanel::default()
             .frame(Frame::NONE)
-            .show(egui_ctx, |ui| {
+            .show_inside(egui_ctx, |ui| {
                 // 【重要】2048制限を絶対に超えないよう、1024にクランプ
                 ui.set_max_width(width as f32);
                 ui.set_max_height(height as f32);
@@ -43,7 +43,7 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                 // 外周の余白をさらにタイトに
                 let container_rect = ui.max_rect().shrink2(Vec2::new(12.0, 10.0));
 
-                ui.allocate_new_ui(UiBuilder::new().max_rect(container_rect), |ui| {
+                ui.scope_builder(UiBuilder::new().max_rect(container_rect), |ui| {
                     ui.vertical(|ui| {
                         // --- ヘッダー（ロゴ） ---
                         ui.vertical_centered(|ui| {

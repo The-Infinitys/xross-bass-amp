@@ -1,5 +1,7 @@
 use crate::utils::FloatParamNormalizedExt;
-use egui::{Align2, Color32, FontId, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Widget, vec2};
+use egui::{
+    Align2, Color32, FontId, Frame, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Widget, vec2,
+};
 use std::f32::consts::PI;
 use truce::params::FloatParamReadF32;
 
@@ -124,7 +126,7 @@ impl<'a> Widget for Knob<'a> {
                         .font(FontId::monospace(10.0))
                         .text_color(Color32::BLACK) // 入力文字は黒
                         .horizontal_align(egui::Align::Center)
-                        .frame(false),
+                        .frame(Frame::NONE),
                 );
 
                 if res.changed() {
