@@ -1,162 +1,128 @@
-use std::f32::consts::PI;
+// noise_gate.rs
+use crate::modules::filter::{Biquad, FilterType};
 
-#[derive(Default, Clone)]
-struct GateState {
-    gate_gain: f32,
-    hold_timer: i32,
-
-    // エンベロープ（帯域別解析）
-    env_low: f32,  // 400Hz以下（ベースの基本波・芯）
-    env_high: f32, // 3.5kHz以上（ヒスノイズおよびアタック成分）
-
-    // ノイズフロア学習
-    noise_floor_high: f32,
-
-    // フィルター状態 (12dB/oct への強化のため2つ用意)
-    lp_state_1: f32,
-    lp_state_2: f32,
-
-    // 解析用
-    lp_analysis_state: f32,
-    hp_analysis_state: f32,
-
-    prev_input: f32,
-    noise_measure_timer: i32,
-    adaptive_sensitivity: f32,
-}
-
-pub struct AutoNoiseGate {
+pub struct NoiseGate {
     sample_rate: f32,
-    state: GateState,
-    analysis_buffer: Vec<bool>,
+    envelope: f32,
+    gate_gain: f32,
+
+    // 演奏音が通る動的フィルター
+    hpf: Biquad,
+    lpf: Biquad,
+
+    // [NEW] ベースの低域による誤作動を防ぐサイドチェーン用HPF（検出回路専用）
+    sidechain_hpf: Biquad,
 }
 
-impl AutoNoiseGate {
+impl NoiseGate {
     pub fn new(sample_rate: f32) -> Self {
-        let mut s = Self {
+        let mut sidechain_hpf = Biquad::new(sample_rate);
+        // 120Hz以下をカットした信号で音量を検出することで、5弦低音のうねりによる誤作動を防ぐ
+        sidechain_hpf.set_params(FilterType::HighPass, 120.0, 0.707);
+
+        Self {
             sample_rate,
-            state: GateState::default(),
-            analysis_buffer: Vec::with_capacity(512),
-        };
-        s.state.gate_gain = 1.0;
-        s.state.noise_floor_high = 0.0005;
-        s.state.adaptive_sensitivity = 4.5; // 少しタイトに設定
-        s
+            envelope: 0.0,
+            gate_gain: 1.0, // 初期値は音が出る状態に
+            hpf: Biquad::new(sample_rate),
+            lpf: Biquad::new(sample_rate),
+            sidechain_hpf,
+        }
     }
 
     pub fn initialize(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate;
+        self.hpf.set_sample_rate(sample_rate);
+        self.lpf.set_sample_rate(sample_rate);
+        self.sidechain_hpf.set_sample_rate(sample_rate);
+        self.sidechain_hpf
+            .set_params(FilterType::HighPass, 120.0, 0.707);
+        self.envelope = 0.0;
+        self.gate_gain = 1.0;
     }
 
     pub fn pre_process(&mut self, buffer: &[f32]) {
-        if self.analysis_buffer.len() != buffer.len() {
-            self.analysis_buffer.resize(buffer.len(), false);
-        }
+        // メタルベースの激しいアタックに追従するため、アタック側の係数は即時（1.0）
+        // リリース側の追従を少しだけ滑らかに（0.008）
+        let env_coef = 0.008;
 
-        let state = &mut self.state;
+        for &sample in buffer {
+            // 原音ではなく、120Hz HPFを通した「サイドチェーン信号」でエンベロープを検出
+            let sc_sample = self.sidechain_hpf.process(sample);
+            let abs = sc_sample.abs();
 
-        // 解析帯域の調整
-        // 低域: 400Hz (音の芯)
-        // 高域: 3500Hz (ここより上を「ノイズ領域」として重点監視)
-        let lp_alpha = 1.0 - (-2.0 * PI * 400.0 / self.sample_rate).exp();
-        let hp_alpha = 1.0 - (-2.0 * PI * 3500.0 / self.sample_rate).exp();
-
-        for (i, &sample) in buffer.iter().enumerate() {
-            let abs_in = sample.abs();
-
-            // --- 1. マルチバンド解析 ---
-            state.lp_analysis_state += lp_alpha * (abs_in - state.lp_analysis_state);
-            state.env_low = state.lp_analysis_state;
-
-            let hp_out = abs_in - state.hp_analysis_state;
-            state.hp_analysis_state += hp_alpha * hp_out;
-            // 高域エンベロープはピークを逃さないよう速めに設定
-            state.env_high += 0.15 * (hp_out.abs() - state.env_high);
-
-            // --- 2. ノイズ学習 ---
-            let is_quiet = abs_in < 0.015;
-            let is_stable = (abs_in - state.prev_input).abs() < 0.0005;
-            state.prev_input = abs_in;
-
-            if is_quiet && is_stable {
-                state.noise_measure_timer += 1;
+            if abs > self.envelope {
+                self.envelope = abs;
             } else {
-                state.noise_measure_timer = 0;
+                self.envelope += env_coef * (abs - self.envelope);
             }
-
-            // 静寂時にノイズの平均レベルを更新
-            if state.noise_measure_timer > (0.15 * self.sample_rate) as i32 {
-                let lr = 0.005;
-                state.noise_floor_high += lr * (state.env_high - state.noise_floor_high);
-            }
-            state.noise_floor_high = state.noise_floor_high.clamp(0.00001, 0.01);
-
-            // --- 3. 周波数依存ヒステリシス・ロジック ---
-            let high_th = state.noise_floor_high * state.adaptive_sensitivity;
-
-            // 判定：高域が閾値を超えるか、低域に十分なパワーがある場合に開く
-            let is_open = if state.gate_gain < 0.1 {
-                // 閉鎖中：開くためには高いエネルギーが必要
-                state.env_high > high_th || state.env_low > 0.015
-            } else {
-                // 開放中：維持するためには半分のエネルギーで良い（チャタリング防止）
-                state.env_high > high_th * 0.5 || state.env_low > 0.007
-            };
-
-            self.analysis_buffer[i] = is_open;
         }
     }
 
-    pub fn post_process(&mut self, buffer: &mut [f32]) {
-        let state = &mut self.state;
+    pub fn post_process(
+        &mut self,
+        buffer: &mut [f32],
+        attack_ms: f32,
+        release_ms: f32,
+        hysteresis_db: f32,
+        threshold_db: f32,
+    ) {
+        if buffer.is_empty() {
+            return;
+        }
 
-        let hold_samples = (0.040 * self.sample_rate) as i32;
-        let atk_alpha = 1.0 - (-1.0 / (0.0005 * self.sample_rate)).exp(); // 0.5ms 超高速アタック
-        let rel_alpha = 1.0 - (-1.0 / (0.120 * self.sample_rate)).exp(); // 120ms 自然なリリース
+        let attack_samples = (attack_ms * self.sample_rate / 1000.0).max(1.0);
+        let release_samples = (release_ms * self.sample_rate / 1000.0).max(1.0);
 
-        for (i, sample) in buffer.iter_mut().enumerate() {
-            let is_detected = self.analysis_buffer[i];
+        let atk_max_step = 1.0 / attack_samples;
+        let rel_max_step = 1.0 / release_samples;
 
-            let target_gain = if is_detected {
-                state.hold_timer = hold_samples;
-                1.0
-            } else if state.hold_timer > 0 {
-                state.hold_timer -= 1;
-                1.0
-            } else {
-                0.0
-            };
+        let open_thr_db = threshold_db;
+        let close_thr_db = threshold_db - hysteresis_db.max(0.1);
+        let db_range = open_thr_db - close_thr_db;
 
+        let env_db = if self.envelope > 1e-6 {
+            20.0 * self.envelope.log10()
+        } else {
+            -100.0
+        };
+
+        // ターゲットゲインの算出
+        let target_gain = if env_db <= close_thr_db {
+            0.0
+        } else if env_db >= open_thr_db {
+            1.0
+        } else {
+            ((env_db - close_thr_db) / db_range).clamp(0.0, 1.0)
+        };
+
+        for sample in buffer.iter_mut() {
             // ゲインのスムージング
-            let g_alpha = if target_gain > state.gate_gain {
-                atk_alpha
+            if target_gain > self.gate_gain {
+                self.gate_gain = (self.gate_gain + atk_max_step).min(target_gain);
             } else {
-                rel_alpha
-            };
-            state.gate_gain += g_alpha * (target_gain - state.gate_gain);
+                self.gate_gain = (self.gate_gain - rel_max_step).max(target_gain);
+            }
 
-            // --- 4. 2段式 Dynamic High-Cut (12dB/oct) ---
-            // SNR（信号対ノイズ比）を計算
-            let snr = (state.env_high / (state.noise_floor_high + 1e-9)).clamp(0.0, 10.0);
+            // === 変更点: ベース専用・指数マッピング dynamic filter ===
+            // ゲートが閉じる（gate_gain -> 0）につれて：
+            // HPFは 35Hz（重低音）から 280Hz（ミッドの濁り成分）へ変化。ベースのローエンドを最後まで守る。
+            // LPFは 16000Hz から 3200Hz（メタルベースのクランク・エッジ成分）へ変化。高域のジーというノイズを先に消す。
+            let hpf_fc = 35.0 * (280.0 / 35.0f32).powf(1.0 - self.gate_gain);
+            let lpf_fc = 16000.0 * (3200.0 / 16000.0f32).powf(1.0 - self.gate_gain);
 
-            // 演奏中：SNRが低い（ノイズに近い）ほど、カットオフを大胆に下げる
-            // 閉鎖中：gate_gainに追従して、フィルターを完全に「閉じる」
-            let cutoff_base = if state.gate_gain > 0.95 {
-                // 演奏中：2kHz(0.1) 〜 20kHz(1.0) の間で動的に変化
-                (snr / 10.0).powi(2).clamp(0.1, 1.0)
-            } else {
-                // ゲート閉鎖中：gate_gainの3乗で急激に絞り込む（遮断性能を重視）
-                state.gate_gain.powi(3).clamp(0.001, 1.0)
-            };
+            self.hpf.set_params(FilterType::HighPass, hpf_fc, 0.707);
+            self.lpf.set_params(FilterType::LowPass, lpf_fc, 0.707);
 
-            let gated_input = *sample * state.gate_gain;
+            // フィルター処理
+            let filtered = self.lpf.process(self.hpf.process(*sample));
 
-            // 1段目 (6dB/oct)
-            state.lp_state_1 += cutoff_base * (gated_input - state.lp_state_1);
-            // 2段目 (さらに 6dB/oct 重ねて 12dB/oct に)
-            state.lp_state_2 += cutoff_base * (state.lp_state_1 - state.lp_state_2);
+            // ゲート閉鎖時のブレンド比率。
+            // 0.35だとメタルベースの低域ノイズが残りすぎる場合があるため、0.25程度に締めてタイトに。
+            let wet = (1.0 - self.gate_gain) * 0.25;
 
-            *sample = state.lp_state_2;
+            // 最終出力
+            *sample = (*sample * self.gate_gain) + (filtered * wet);
         }
     }
 }

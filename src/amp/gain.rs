@@ -3,13 +3,13 @@ use std::sync::Arc;
 mod dark;
 use dark::DarkDistortion;
 mod noise_gate;
-use noise_gate::AutoNoiseGate;
+use noise_gate::NoiseGate;
 use truce::params::FloatParamReadF32;
 
 pub struct GainProcessor {
     pub params: Arc<XrossBassAmpParams>,
     metal: DarkDistortion,
-    noise_gate: AutoNoiseGate,
+    noise_gate: NoiseGate,
     sample_rate: f32,
 }
 
@@ -18,7 +18,7 @@ impl GainProcessor {
         Self {
             params,
             metal: DarkDistortion::new(44100.0),
-            noise_gate: AutoNoiseGate::new(44100.0),
+            noise_gate: NoiseGate::new(44100.0),
             sample_rate: 44100.0,
         }
     }
@@ -53,7 +53,12 @@ impl GainProcessor {
         }
 
         // 5. ポスト・ノイズゲート (歪み後のノイズをカット)
-        self.noise_gate.post_process(input);
+        let attack_ms = self.params.noise_gate_attack.value();
+        let release_ms = self.params.noise_gate_release.value();
+        let hysteresis_db = self.params.noise_gate_hysteresis.value();
+        let threshold_db = self.params.noise_gate_threshold.value();
+        self.noise_gate
+            .post_process(input, attack_ms, release_ms, hysteresis_db, threshold_db);
 
         // 6. マスターゲイン
         let master_factor = 10.0f32.powf(self.params.master_gain.value() / 20.0);

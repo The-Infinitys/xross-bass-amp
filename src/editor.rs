@@ -24,7 +24,7 @@ fn get_vibrant_rainbow_color(index: usize, total: usize) -> Color32 {
 pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
     // ターゲットサイズを定義（このサイズをベースに描画）
     let width = 906;
-    let height = 640;
+    let height = 660;
     let bg = Background::new();
 
     let editor = EguiEditor::new(params.clone(), (width, height), move |egui_ctx, _state| {
@@ -125,11 +125,26 @@ pub fn create_editor(params: Arc<XrossBassAmpParams>) -> Box<dyn Editor> {
                                 });
                             });
                         });
-
-                        ui.add_space(6.0);
+                        let noise_gate_height = ui.available_height().at_most(40.0);
+                        ui.add_space(5.0);
+                        draw_section_with_height(ui, "NOISE GATE", noise_gate_height, |ui| {
+                            let params = [
+                                &params.noise_gate_threshold,
+                                &params.noise_gate_hysteresis,
+                                &params.noise_gate_attack,
+                                &params.noise_gate_release,
+                            ];
+                            let color = Color32::DARK_GREEN;
+                            ui.columns(params.len(), |ui| {
+                                for (i, param) in params.iter().enumerate() {
+                                    ui[i].add(LinearSlider::new(param, color));
+                                }
+                            });
+                        });
+                        ui.add_space(5.0);
 
                         // --- 下段: キャビネットセクション ---
-                        let cab_height = ui.available_height().at_most(400.0);
+                        let cab_height = ui.available_height().at_most(350.0);
                         draw_section_with_height(
                             ui,
                             "CABINET & DUAL MICROPHONES",

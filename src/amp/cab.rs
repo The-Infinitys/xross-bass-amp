@@ -15,6 +15,9 @@ pub struct CabProcessor {
     woofer_character: Biquad,     // 低域の太さと粘り
     tweeter_path: Biquad,         // 高域のパキッとした質感 (10-inch+Hornイメージ)
 
+    // [NEW] 低域サチュレーション用のクロスオーバー
+    saturation_lpf: Biquad,
+
     // --- マイクロフォン・セクション ---
     // Mic A: Large Diaphragm Dynamic (D112/RE20 style) - 芯と重さ
     mic_a_tone: [Biquad; 3],
@@ -24,8 +27,12 @@ pub struct CabProcessor {
     // --- Bass Mastering Chain ---
     sub_thump: Biquad,          // 50-60Hzの「地面を揺らす」成分
     growl_shelf: Biquad,        // 800Hz付近の歪みのエッジ
+    clank_peak: Biquad,         // [NEW] モダンメタルに不可欠な2.8kHz付近の金属的アタック
     mud_cut: Biquad,            // 250Hz付近の濁り取り
     low_end_stabilizer: Biquad, // 最終的な低域の引き締め
+
+    // [NEW] ノイズゲート用サイドチェーンフィルター (前段にゲートを置く際の流用コア)
+    pub gate_sidechain_hpf: Biquad,
 
     // ステレオ・空間・物理挙動
     phase_alignment_delay: Vec<f32>,
@@ -45,12 +52,15 @@ impl CabProcessor {
             body_resonators: std::array::from_fn(|_| Biquad::new(sr)),
             woofer_character: Biquad::new(sr),
             tweeter_path: Biquad::new(sr),
+            saturation_lpf: Biquad::new(sr),
             mic_a_tone: std::array::from_fn(|_| Biquad::new(sr)),
             mic_b_tone: std::array::from_fn(|_| Biquad::new(sr)),
             sub_thump: Biquad::new(sr),
             growl_shelf: Biquad::new(sr),
+            clank_peak: Biquad::new(sr),
             mud_cut: Biquad::new(sr),
             low_end_stabilizer: Biquad::new(sr),
+            gate_sidechain_hpf: Biquad::new(sr),
 
             phase_alignment_delay: vec![0.0; PHASE_DELAY_SIZE],
             room_reflection: vec![0.0; MAX_ROOM_DELAY],
@@ -66,10 +76,13 @@ impl CabProcessor {
         let filters: &mut [&mut Biquad] = &mut [
             &mut self.woofer_character,
             &mut self.tweeter_path,
+            &mut self.saturation_lpf,
             &mut self.sub_thump,
             &mut self.growl_shelf,
+            &mut self.clank_peak,
             &mut self.mud_cut,
             &mut self.low_end_stabilizer,
+            &mut self.gate_sidechain_hpf,
         ];
         for f in filters {
             f.set_sample_rate(sample_rate);
@@ -102,44 +115,59 @@ impl CabProcessor {
             return;
         }
 
-        // 1. キャビネット共鳴 (ベース特有の低域重心)
-        // Sub: 地面を揺らす超低域
+        // 1. キャビネット共鳴 (メタル用に低域を少しタイトに、Qを高めに)
+        // Sub: 5弦・DDropのボトムを支える (ルーズになりすぎないようQを1.5に引き上げ)
         self.body_resonators[0].set_params(
-            FilterType::Peaking(5.0 * res_mod),
-            55.0 * (15.0 / size),
-            1.2,
+            FilterType::Peaking(4.0 * res_mod),
+            50.0 * (15.0 / size),
+            1.5,
         );
-        // Low-Mid: 箱の鳴り (濁りすぎないようにQを調整)
-        self.body_resonators[1].set_params(FilterType::Peaking(2.0 * res_mod), 180.0, 2.0);
+        // Low-Mid: 箱鳴り成分。300Hz付近のモタつきを避けるため160Hz付近をタイトに
+        self.body_resonators[1].set_params(FilterType::Peaking(1.5 * res_mod), 160.0, 2.5);
         // Baffle: アタックの跳ね返り
         self.body_resonators[2].set_params(FilterType::Peaking(1.5), 900.0, 1.0);
 
+        // 慣性サチュレーション用のクロスオーバーLPF (300Hz以下のみをサチュレートさせる)
+        self.saturation_lpf
+            .set_params(FilterType::LowPass, 300.0, 0.7);
+
         // 2. ウーファーとツイーターの役割分担
-        // ツイーター (スラップのパキパキ感)
+        // メタル特有のスラップ・ピックの「カリカリ感」を出すため、カットオフを3.2kHzに微調整
         self.tweeter_path
-            .set_params(FilterType::HighShelf(pres_mod * 6.0), 3500.0, 0.7);
+            .set_params(FilterType::HighShelf(pres_mod * 7.0), 3200.0, 0.7);
 
-        // 3. Mic A (Dynamic: 重厚感重視)
+        // 3. Mic A (Dynamic: メタル定番のダークかつ強烈なパンチ)
         let dist_a = self.params.mic_a_distance.value();
-        self.mic_a_tone[0].set_params(FilterType::Peaking((1.0 - dist_a) * 6.0), 80.0, 0.6); // 近接効果
-        self.mic_a_tone[1].set_params(FilterType::Peaking(2.0), 2500.0, 0.8); // 輪郭
-        self.mic_a_tone[2].set_params(FilterType::LowPass, 6000.0, 0.7); // 高域の丸み
+        self.mic_a_tone[0].set_params(FilterType::Peaking((1.0 - dist_a) * 5.0), 65.0, 0.8); // 近接効果の重心を下げる
+        self.mic_a_tone[1].set_params(FilterType::Peaking(3.0), 1500.0, 1.0); // ゴツゴツしたミッド
+        self.mic_a_tone[2].set_params(FilterType::LowPass, 5000.0, 0.7); // ギターと被る超高域をカット
 
-        // 4. Mic B (Condenser/DI: 解像度重視)
+        // 4. Mic B (Condenser/DI: ピックの金属摩擦・アタックの解像度)
         let dist_b = self.params.mic_b_distance.value();
-        self.mic_b_tone[0].set_params(FilterType::Peaking(3.0), 400.0, 0.7); // 中域の押し出し
-        self.mic_b_tone[1].set_params(FilterType::HighShelf(pres_mod * 3.0), 4000.0, 0.7);
-        self.mic_b_tone[2].set_params(FilterType::LowPass, 12000.0 - (dist_b * 4000.0), 0.7);
+        self.mic_b_tone[0].set_params(FilterType::Peaking(2.0), 700.0, 0.8); // ドライブが絡むミッド
+        self.mic_b_tone[1].set_params(FilterType::HighShelf(pres_mod * 4.5), 3500.0, 0.7); // 輪郭のギラつき
+        self.mic_b_tone[2].set_params(FilterType::LowPass, 10000.0 - (dist_b * 3000.0), 0.7);
 
-        // 5. ミックスを助ける最終処理
+        // 5. ミックスを助ける最終処理 (Mastering Chain)
         self.sub_thump
-            .set_params(FilterType::Peaking(2.5), 65.0, 1.5);
+            .set_params(FilterType::Peaking(2.0), 60.0, 2.0);
         self.mud_cut
-            .set_params(FilterType::Peaking(-3.0), 250.0, 1.5); // 濁りカット
+            .set_params(FilterType::Peaking(-4.0), 220.0, 1.8); // メタルの200Hz付近の濁りは容赦なくカット
+
+        // [NEW] 2.8kHz付近のメタル・クランク成分（Dingwall等のパキパキしたエッジ）
+        self.clank_peak
+            .set_params(FilterType::Peaking(pres_mod * 3.5), 2800.0, 1.2);
+
         self.growl_shelf
-            .set_params(FilterType::HighShelf(pres_mod * 2.0), 1200.0, 0.5);
+            .set_params(FilterType::HighShelf(pres_mod * 1.5), 1000.0, 0.5);
+
+        // サブベースのボトムが破綻しないよう、HPFのカットオフを30Hzにして急峻に（Q=0.9）引き締め
         self.low_end_stabilizer
-            .set_params(FilterType::HighPass, 35.0, 0.7); // 超低域の整理
+            .set_params(FilterType::HighPass, 30.0, 0.9);
+
+        // [NEW] ゲート流用時のためのサイドチェーンHPF設定 (120Hz以下を感知させない)
+        self.gate_sidechain_hpf
+            .set_params(FilterType::HighPass, 120.0, 0.7);
 
         self.last_params_hash = current_hash;
     }
@@ -154,16 +182,24 @@ impl CabProcessor {
         for i in 0..num_samples {
             let mut sig = buffer.output(0)[i];
 
-            // --- 1. Cone Inertia & Nonlinear Saturation (物理的な「粘り」) ---
-            // 大口径スピーカーほど戻りが遅く、重低音で飽和する挙動
-            let inertia = (0.92 - (size * 0.005)).clamp(0.8, 0.95);
-            let saturated = if sig > 0.0 {
-                sig.atan()
+            // --- 1. Frequency-Dependent Cone Inertia (改良版・物理的な「粘り」) ---
+            // 全帯域を一括で遅らせるとアタックが鈍るため、低域成分のみを取り出してサチュレートさせる
+            let low_component = self.saturation_lpf.process(sig);
+            let high_component = sig - low_component; // 完全に位相の合うハイパス成分
+
+            let inertia = (0.94 - (size * 0.004)).clamp(0.85, 0.96);
+            let saturated_low = if low_component > 0.0 {
+                low_component.atan()
             } else {
-                (sig * 0.96).atan() * 1.04
+                (low_component * 0.96).atan() * 1.04
             };
-            sig = self.cone_inertia_state + inertia * (saturated - self.cone_inertia_state);
-            self.cone_inertia_state = sig;
+
+            // 低域のみ慣性遅れを適用
+            self.cone_inertia_state = self.cone_inertia_state
+                + (1.0 - inertia) * (saturated_low - self.cone_inertia_state);
+
+            // 鋭い高域（ピックアタック）と、粘りのある重低音を再結合
+            sig = self.cone_inertia_state + high_component;
 
             // --- 2. Cabinet Resonances ---
             for res in &mut self.body_resonators {
@@ -173,8 +209,8 @@ impl CabProcessor {
             // --- 3. Parallel Path (Woofer & Tweeter) ---
             let woofer_sig = sig;
             let tweeter_sig = self.tweeter_path.process(sig);
-            // ツイーターは高域のみ通し、ウーファーの太さにパキッとしたエッジを足す
-            let combined_sig = woofer_sig + tweeter_sig * 0.4;
+            // メタル用にツイーターのブレンド量を 0.4 -> 0.55 に引き上げ、エッジを明快に
+            let combined_sig = woofer_sig + tweeter_sig * 0.55;
 
             // --- 4. Dual Mic Path ---
             let mut sig_a = combined_sig;
@@ -188,36 +224,42 @@ impl CabProcessor {
             }
 
             // --- 5. Mixing & Stabilization ---
-            // ベースはセンターの定位が命なので、ステレオ幅は控えめに、奥行きを重視
             let mut out_l = sig_a * 0.8 + sig_b * 0.4;
-            let mut out_r = sig_a * 0.8 - sig_b * 0.2; // 微かな位相差で空間を作る
+            let mut out_r = sig_a * 0.8 - sig_b * 0.2;
 
             // 最終的なトーン補正 (Mastering Logic)
             out_l = self.sub_thump.process(out_l);
             out_r = self.sub_thump.process(out_r);
             out_l = self.mud_cut.process(out_l);
             out_r = self.mud_cut.process(out_r);
+
+            // [NEW] Clank成分のインサート
+            out_l = self.clank_peak.process(out_l);
+            out_r = self.clank_peak.process(out_r);
+
             out_l = self.growl_shelf.process(out_l);
             out_r = self.growl_shelf.process(out_r);
             out_l = self.low_end_stabilizer.process(out_l);
             out_r = self.low_end_stabilizer.process(out_r);
 
-            // Room (ベースのルームは「広さ」より「壁の跳ね返りの硬さ」)
+            // --- 6. Room Reflection (硬いコンクリートの反射壁イメージ) ---
             if room_mix > 0.0 {
-                let reflect_time = 0.02 + self.params.room_size.value() * 0.03;
+                let reflect_time = 0.015 + self.params.room_size.value() * 0.025; // メタル用に少し短くタイトに
                 let dr = (reflect_time * self.sample_rate) as usize;
                 let buf_len = self.room_reflection.len();
                 let idx = (self.write_idx_room + buf_len - dr) % buf_len;
 
-                let reflection = (self.room_reflection[idx] * 0.7).tanh() * 0.3;
+                // フィードバックを高めにして金属的な響き（アンビエンス）をシミュレート
+                let reflection = (self.room_reflection[idx] * 0.85).tanh() * 0.25;
                 out_l += reflection * room_mix;
-                out_r -= reflection * room_mix;
+                out_r -= reflection * room_mix; // 逆相で広げる
 
+                // 入力信号をルームバッファへ記憶
                 self.room_reflection[self.write_idx_room] = (out_l + out_r) * 0.5;
                 self.write_idx_room = (self.write_idx_room + 1) % buf_len;
             }
 
-            // 出力 (ベースはモノラル互換性を極めて高く保つ)
+            // 出力
             if buffer.num_output_channels() >= 2 {
                 buffer.output(0)[i] = out_l;
                 buffer.output(1)[i] = out_r;

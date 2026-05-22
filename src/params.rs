@@ -106,8 +106,43 @@ pub struct XrossBassAmpParams {
         smooth = "exp(50)"
     )]
     pub resonance: FloatParam,
+    // --- 3. Noise Gate Section ---
+    #[param(
+        name = "Noise Gate Attack",
+        range = "linear(0.0, 100.0)",
+        default = 1.0,
+        unit = "ms",
+        smooth = "exp(50)"
+    )]
+    pub noise_gate_attack: FloatParam,
 
-    // --- 3. Cab Section ---
+    #[param(
+        name = "Noise Gate Release",
+        range = "linear(0.0, 100.0)",
+        default = 10.0,
+        unit = "ms",
+        smooth = "exp(50)"
+    )]
+    pub noise_gate_release: FloatParam,
+
+    #[param(
+        name = "Noise Gate Hysteresis",
+        range = "linear(-100.0, 0.0)",
+        default = -60.0,
+        unit = "dB",
+        smooth = "exp(50)"
+    )]
+    pub noise_gate_hysteresis: FloatParam,
+
+    #[param(
+        name = "Noise Gate Threshold",
+        range = "linear(-100.0, 0.0)",
+        default = -40.0,
+        unit = "dB",
+        smooth = "exp(50)"
+    )]
+    pub noise_gate_threshold: FloatParam,
+    // --- 4. Cab Section ---
     #[param(
         name = "Speaker Size",
         range = "linear(10.0,20.0)",
@@ -167,7 +202,7 @@ pub struct XrossBassAmpParams {
     )]
     pub room_mix: FloatParam,
 
-    // --- 4. Effects Section ---
+    // --- 5. Effects Section ---
     #[param(
         name = "Speaker Mix",
         range = "linear(0.0, 1.0)",
