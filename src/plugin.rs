@@ -15,8 +15,8 @@ impl PluginLogic for XrossBassAmp {
         self.process_truce(buffer)
     }
 
-    fn custom_editor(&self) -> Option<Box<dyn Editor>> {
-        Some(self.ui())
+    fn editor(&self) -> Box<dyn Editor> {
+        self.ui()
     }
 
     fn bus_layouts() -> Vec<BusLayout> {

@@ -77,11 +77,8 @@ impl XrossBassAmp {
         let di_mix = self.params.di_mix.value();
         let mut mixed_head_signal = vec![0.0f32; num_samples]; // 一時的なミックス用
 
-        for i in 0..num_samples {
-            // di_mix = 0.0 で全歪み、1.0 で全クリーン（一般的なDIブレンドの逆ならここを調整）
-            // ここでは di_mix 0.0(Drive 100%) ~ 1.0(Clean 100%) と仮定
-            mixed_head_signal[i] =
-                self.head_buffer[i] * (1.0 - di_mix) + self.clean_buffer[i] * di_mix;
+        for (i, signal) in mixed_head_signal.iter_mut().enumerate().take(num_samples) {
+            *signal = self.head_buffer[i] * (1.0 - di_mix) + self.clean_buffer[i] * di_mix;
         }
 
         // --- 4. Cabinet Processing ---
